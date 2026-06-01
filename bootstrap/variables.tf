@@ -1,7 +1,7 @@
 variable "project_name" {
   description = "Nom court du projet."
   type        = string
-  default     = "maintenance-darkmira"
+  default     = "darkmira-maintenance"
 }
 
 variable "environment" {
