@@ -33,7 +33,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::387219500605:role/maintenance-darkmira-dev-github-actions-terraform
+          role-to-assume: arn:aws:iam::387219500605:role/darkmira-maintenance-dev-github-actions-terraform
           role-session-name: gh-terraform-apply
           aws-region: eu-north-1
 
