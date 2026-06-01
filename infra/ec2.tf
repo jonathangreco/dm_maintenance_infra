@@ -1,0 +1,77 @@
+data "aws_ami" "amazon_linux_2023" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-2023*-x86_64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+resource "aws_iam_role" "app_ec2" {
+  name = "${local.name_prefix}-app-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${local.name_prefix}-app-ec2-role"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "app_ec2_ssm" {
+  role       = aws_iam_role.app_ec2.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "app" {
+  name = "${local.name_prefix}-app-instance-profile"
+  role = aws_iam_role.app_ec2.name
+}
+
+resource "aws_key_pair" "app" {
+  count = var.enable_ssh ? 1 : 0
+
+  key_name   = "${local.name_prefix}-app-key"
+  public_key = file(pathexpand(var.ssh_public_key_path))
+
+  tags = {
+    Name = "${local.name_prefix}-app-key"
+  }
+}
+
+resource "aws_instance" "app" {
+  ami                    = data.aws_ami.amazon_linux_2023.id
+  instance_type          = var.app_instance_type
+  key_name               = var.enable_ssh ? aws_key_pair.app[0].key_name : null
+  subnet_id              = var.app_subnet_tier == "public" ? aws_subnet.public["0"].id : aws_subnet.private_app["0"].id
+  vpc_security_group_ids = [aws_security_group.app.id]
+  iam_instance_profile   = aws_iam_instance_profile.app.name
+
+  tags = {
+    Name = "${local.name_prefix}-app-ec2"
+  }
+
+  depends_on = [aws_db_instance.main]
+}
+
+resource "aws_lb_target_group_attachment" "app" {
+  target_group_arn = aws_lb_target_group.app.arn
+  target_id        = aws_instance.app.id
+  port             = var.app_port
+}

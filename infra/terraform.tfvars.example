@@ -9,3 +9,7 @@ db_username = "app_user"
 # Ne mets jamais le vrai mot de passe dans Git.
 # Crée plutôt un fichier local terraform.tfvars ignoré par Git.
 db_password = "CHANGE_ME_LOCALLY"
+
+enable_ssh          = false
+ssh_public_key_path = "~/.ssh/id_ed25519.pub"
+ssh_allowed_cidr    = "YOUR_PUBLIC_IP/32"
