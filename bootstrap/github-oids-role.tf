@@ -53,11 +53,18 @@ data "aws_iam_policy_document" "github_actions_terraform_permissions" {
       "iam:DeleteRole",
       "iam:AttachRolePolicy",
       "iam:DetachRolePolicy",
+      "iam:GetRolePolicy",
       "iam:PutRolePolicy",
       "iam:DeleteRolePolicy",
       "iam:PassRole",
       "iam:TagRole",
       "iam:UntagRole",
+      "iam:GetInstanceProfile",
+      "iam:CreateInstanceProfile",
+      "iam:DeleteInstanceProfile",
+      "iam:AddRoleToInstanceProfile",
+      "iam:RemoveRoleFromInstanceProfile",
+      "iam:ListInstanceProfilesForRole",
       "iam:ListAttachedRolePolicies",
       "iam:ListRolePolicies"
     ]

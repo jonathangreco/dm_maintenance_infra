@@ -6,19 +6,14 @@ owner        = "jonathan"
 db_name     = "app"
 db_username = "app_user"
 
-# Ne mets jamais le vrai mot de passe dans Git.
-# Crée plutôt un fichier local terraform.tfvars ignoré par Git.
-db_password = "CHANGE_ME_LOCALLY"
-
-enable_ssh          = false
-ssh_public_key_path = "~/.ssh/id_ed25519.pub"
-ssh_public_key      = null
-ssh_allowed_cidr    = "YOUR_PUBLIC_IP/32"
+enable_ssh       = true
+ssh_public_key   = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDA8v100dIh72bVCmxW8UuKB6+yU1Af2VzDwbVzNXq+X nataniel.greco@gmail.com"
+ssh_allowed_cidr = "90.38.211.210/32"
 
 app_container_image = "ghcr.io/jonathangreco/darkmira-maintenance-app:prod"
 app_nginx_image     = "ghcr.io/jonathangreco/darkmira-maintenance-nginx:prod"
 ghcr_login_enabled  = true
 ghcr_username       = "jonathangreco"
 
-app_env_ssm_parameter_name  = "/darkmira-maintenance/dev/app/env"
+app_env_ssm_parameter_name    = "/darkmira-maintenance/dev/app/env"
 ghcr_token_ssm_parameter_name = "/darkmira-maintenance/dev/ghcr/token"

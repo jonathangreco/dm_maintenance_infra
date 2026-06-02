@@ -99,6 +99,12 @@ variable "ssh_public_key_path" {
   default     = "~/.ssh/id_ed25519.pub"
 }
 
+variable "ssh_public_key" {
+  description = "Cle publique SSH a importer dans AWS. Prioritaire sur ssh_public_key_path si renseignee."
+  type        = string
+  default     = null
+}
+
 variable "ssh_allowed_cidr" {
   description = "CIDR autorise a joindre l'EC2 en SSH."
   type        = string
@@ -109,6 +115,42 @@ variable "app_port" {
   description = "Port HTTP exposé par l'application sur EC2."
   type        = number
   default     = 8080
+}
+
+variable "app_container_image" {
+  description = "Image Docker PHP-FPM de l'application Symfony."
+  type        = string
+  default     = "ghcr.io/jonathangreco/darkmira-maintenance-app:prod"
+}
+
+variable "app_nginx_image" {
+  description = "Image Docker Nginx servant l'application Symfony."
+  type        = string
+  default     = "ghcr.io/jonathangreco/darkmira-maintenance-nginx:prod"
+}
+
+variable "ghcr_login_enabled" {
+  description = "Active le login GHCR avant docker pull."
+  type        = bool
+  default     = true
+}
+
+variable "ghcr_username" {
+  description = "Username GitHub utilisé pour se connecter à GHCR."
+  type        = string
+  default     = "jonathangreco"
+}
+
+variable "ghcr_token_ssm_parameter_name" {
+  description = "Nom du paramètre SSM SecureString contenant le token GHCR."
+  type        = string
+  default     = "/darkmira-maintenance/dev/ghcr/token"
+}
+
+variable "app_env_ssm_parameter_name" {
+  description = "Nom du parametre SSM SecureString contenant le fichier env runtime de l'application."
+  type        = string
+  default     = "/darkmira-maintenance/dev/app/env"
 }
 
 variable "db_instance_class" {

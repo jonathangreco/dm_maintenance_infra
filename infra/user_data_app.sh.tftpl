@@ -1,0 +1,53 @@
+#!/bin/bash
+set -euo pipefail
+
+exec > >(tee /var/log/darkmira-bootstrap.log | logger -t darkmira-bootstrap -s 2>/dev/console) 2>&1
+
+APP_DIR="/opt/darkmira-maintenance"
+COMPOSE_VERSION="v2.29.7"
+
+dnf update -y
+dnf install -y awscli curl docker
+
+systemctl enable --now docker
+
+mkdir -p /usr/local/lib/docker/cli-plugins
+if ! docker compose version >/dev/null 2>&1; then
+  curl -fsSL "https://github.com/docker/compose/releases/download/$${COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+    -o /usr/local/lib/docker/cli-plugins/docker-compose
+  chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+fi
+
+mkdir -p "$${APP_DIR}" /var/darkmira/config
+
+cat > "$${APP_DIR}/docker-compose.prod.yml" <<'COMPOSE'
+${compose_file}
+COMPOSE
+
+aws ssm get-parameter \
+  --region "${aws_region}" \
+  --name "${app_env_ssm_parameter_name}" \
+  --with-decryption \
+  --query "Parameter.Value" \
+  --output text > "$${APP_DIR}/.env"
+
+cat >> "$${APP_DIR}/.env" <<'ENV'
+APP_IMAGE=${app_image}
+NGINX_IMAGE=${nginx_image}
+NGINX_PORT=${nginx_port}
+ENV
+
+if [ "${ghcr_login_enabled}" = "true" ]; then
+  GHCR_TOKEN="$(aws ssm get-parameter \
+    --region "${aws_region}" \
+    --name "${ghcr_token_ssm_parameter_name}" \
+    --with-decryption \
+    --query "Parameter.Value" \
+    --output text)"
+  printf '%s' "$${GHCR_TOKEN}" | docker login ghcr.io --username "${ghcr_username}" --password-stdin
+fi
+
+cd "$${APP_DIR}"
+docker compose --env-file .env -f docker-compose.prod.yml pull
+docker compose --env-file .env -f docker-compose.prod.yml up -d --remove-orphans
+docker image prune -f
