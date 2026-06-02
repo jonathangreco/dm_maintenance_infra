@@ -60,6 +60,29 @@ resource "aws_iam_role_policy" "app_ec2_ssm_parameters_read" {
   })
 }
 
+resource "aws_iam_role_policy" "app_ec2_cloudwatch_logs" {
+  name = "${local.name_prefix}-app-ec2-cloudwatch-logs"
+  role = aws_iam_role.app_ec2.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:DescribeLogStreams",
+          "logs:PutLogEvents"
+        ]
+        Resource = [
+          "${aws_cloudwatch_log_group.ec2.arn}:*",
+          "${aws_cloudwatch_log_group.docker.arn}:*"
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_iam_instance_profile" "app" {
   name = "${local.name_prefix}-app-instance-profile"
   role = aws_iam_role.app_ec2.name
@@ -94,6 +117,8 @@ resource "aws_instance" "app" {
     nginx_image                   = var.app_nginx_image
     nginx_port                    = var.app_port
     aws_region                    = var.aws_region
+    ec2_log_group_name            = aws_cloudwatch_log_group.ec2.name
+    docker_log_group_name         = aws_cloudwatch_log_group.docker.name
     compose_file                  = templatefile("${path.module}/docker-compose.prod.yml.tftpl", {})
   })
 

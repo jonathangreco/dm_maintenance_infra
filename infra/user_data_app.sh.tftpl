@@ -7,7 +7,7 @@ APP_DIR="/opt/darkmira-maintenance"
 COMPOSE_VERSION="v2.29.7"
 
 dnf update -y
-dnf install -y awscli docker
+dnf install -y amazon-cloudwatch-agent awscli docker
 
 systemctl enable --now docker
 
@@ -19,6 +19,43 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 mkdir -p "$${APP_DIR}" /var/darkmira/config
+
+cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CWAGENT'
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/darkmira-bootstrap.log",
+            "log_group_name": "${ec2_log_group_name}",
+            "log_stream_name": "{instance_id}/darkmira-bootstrap",
+            "timezone": "UTC"
+          },
+          {
+            "file_path": "/var/log/cloud-init-output.log",
+            "log_group_name": "${ec2_log_group_name}",
+            "log_stream_name": "{instance_id}/cloud-init-output",
+            "timezone": "UTC"
+          },
+          {
+            "file_path": "/var/log/messages",
+            "log_group_name": "${ec2_log_group_name}",
+            "log_stream_name": "{instance_id}/messages",
+            "timezone": "UTC"
+          }
+        ]
+      }
+    }
+  }
+}
+CWAGENT
+
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config \
+  -m ec2 \
+  -s \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 
 cat > "$${APP_DIR}/docker-compose.prod.yml" <<'COMPOSE'
 ${compose_file}
@@ -35,6 +72,8 @@ cat >> "$${APP_DIR}/.env" <<'ENV'
 APP_IMAGE=${app_image}
 NGINX_IMAGE=${nginx_image}
 NGINX_PORT=${nginx_port}
+AWS_REGION=${aws_region}
+CLOUDWATCH_DOCKER_LOG_GROUP=${docker_log_group_name}
 ENV
 
 if [ "${ghcr_login_enabled}" = "true" ]; then

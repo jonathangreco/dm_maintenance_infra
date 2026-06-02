@@ -153,6 +153,12 @@ variable "app_env_ssm_parameter_name" {
   default     = "/darkmira-maintenance/dev/app/env"
 }
 
+variable "cloudwatch_log_retention_days" {
+  description = "Retention en jours des logs CloudWatch applicatifs et EC2."
+  type        = number
+  default     = 14
+}
+
 variable "db_instance_class" {
   description = "Classe d'instance RDS MySQL."
   type        = string

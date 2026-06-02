@@ -17,3 +17,5 @@ ghcr_username       = "jonathangreco"
 
 app_env_ssm_parameter_name    = "/darkmira-maintenance/dev/app/env"
 ghcr_token_ssm_parameter_name = "/darkmira-maintenance/dev/ghcr/token"
+
+cloudwatch_log_retention_days = 14
