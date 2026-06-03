@@ -6,6 +6,7 @@ import boto3
 
 ec2 = boto3.client("ec2")
 rds = boto3.client("rds")
+ssm = boto3.client("ssm")
 
 APP_INSTANCE_ID = os.environ["APP_INSTANCE_ID"]
 DB_IDENTIFIER = os.environ["DB_IDENTIFIER"]
@@ -64,6 +65,25 @@ def handler(event, context):
             result["ec2"]["requested"] = "start"
         else:
             result["ec2"]["requested"] = "noop"
+
+    elif action == "refresh-app":
+        current_ec2_state = ec2_state()
+        result["ec2"]["previous_state"] = current_ec2_state
+        if current_ec2_state != "running":
+            result["ec2"]["requested"] = "noop"
+            result["ssm"] = {"reason": "instance-not-running"}
+        else:
+            command = ssm.send_command(
+                InstanceIds=[APP_INSTANCE_ID],
+                DocumentName="AWS-RunShellScript",
+                Parameters={
+                    "commands": ["/opt/darkmira-maintenance/deploy.sh refresh"],
+                    "executionTimeout": ["1800"],
+                },
+                Comment="Refresh Darkmira app images after nightly EC2 startup",
+            )
+            result["ec2"]["requested"] = "refresh-app"
+            result["ssm"] = {"command_id": command["Command"]["CommandId"]}
 
     else:
         raise ValueError(f"Unsupported action: {action}")

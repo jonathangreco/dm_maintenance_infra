@@ -65,6 +65,16 @@ resource "aws_iam_role_policy" "night_scheduler_lambda" {
           "rds:StopDBInstance"
         ]
         Resource = aws_db_instance.main.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:SendCommand"
+        ]
+        Resource = [
+          aws_instance.app.arn,
+          "arn:aws:ssm:${var.aws_region}:*:document/AWS-RunShellScript"
+        ]
       }
     ]
   })
@@ -171,6 +181,11 @@ locals {
       description = "Start the app EC2 after RDS"
       expression  = var.night_shutdown_start_ec2_schedule
       input       = jsonencode({ action = "start-ec2" })
+    }
+    refresh-app = {
+      description = "Pull latest images and restart the app after EC2 startup"
+      expression  = var.night_shutdown_refresh_app_schedule
+      input       = jsonencode({ action = "refresh-app" })
     }
   } : {}
 }

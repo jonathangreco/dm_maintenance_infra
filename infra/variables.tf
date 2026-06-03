@@ -200,3 +200,9 @@ variable "night_shutdown_start_ec2_schedule" {
   type        = string
   default     = "cron(45 7 * * ? *)"
 }
+
+variable "night_shutdown_refresh_app_schedule" {
+  description = "Expression cron EventBridge Scheduler pour repull/restart l'application apres le demarrage EC2."
+  type        = string
+  default     = "cron(50 7 * * ? *)"
+}
