@@ -170,3 +170,33 @@ variable "db_allocated_storage" {
   type        = number
   default     = 20
 }
+
+variable "night_shutdown_enabled" {
+  description = "Active l'arret nocturne automatique de l'EC2 et de RDS."
+  type        = bool
+  default     = false
+}
+
+variable "night_shutdown_timezone" {
+  description = "Timezone IANA utilisee par EventBridge Scheduler pour les horaires d'arret/demarrage."
+  type        = string
+  default     = "Europe/Paris"
+}
+
+variable "night_shutdown_stop_schedule" {
+  description = "Expression cron EventBridge Scheduler pour arreter EC2 et RDS."
+  type        = string
+  default     = "cron(0 23 * * ? *)"
+}
+
+variable "night_shutdown_start_rds_schedule" {
+  description = "Expression cron EventBridge Scheduler pour demarrer RDS avant l'EC2."
+  type        = string
+  default     = "cron(30 7 * * ? *)"
+}
+
+variable "night_shutdown_start_ec2_schedule" {
+  description = "Expression cron EventBridge Scheduler pour demarrer l'EC2 apres RDS."
+  type        = string
+  default     = "cron(45 7 * * ? *)"
+}
