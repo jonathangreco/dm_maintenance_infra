@@ -1,7 +1,3 @@
-data "aws_iam_openid_connect_provider" "github_actions" {
-  url = "https://token.actions.githubusercontent.com"
-}
-
 data "aws_iam_policy_document" "github_actions_app_deploy_trust" {
   statement {
     sid     = "GithubActionsAppDeployAssumeRoleWithOidc"
@@ -10,7 +6,7 @@ data "aws_iam_policy_document" "github_actions_app_deploy_trust" {
 
     principals {
       type        = "Federated"
-      identifiers = [data.aws_iam_openid_connect_provider.github_actions.arn]
+      identifiers = ["arn:aws:iam::387219500605:oidc-provider/token.actions.githubusercontent.com"]
     }
 
     condition {
