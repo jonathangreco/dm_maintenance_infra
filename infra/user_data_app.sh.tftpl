@@ -85,7 +85,7 @@ COMPOSE_FILE="$${APP_DIR}/docker-compose.prod.yml"
 ENV_FILE="$${APP_DIR}/.env"
 MODE="$${1:-refresh}"
 
-if [ "$$#" -gt 0 ]; then
+if [ "$#" -gt 0 ]; then
   shift
 fi
 
@@ -95,8 +95,8 @@ NGINX_IMAGE_ARG="$${2:-}"
 cd "$${APP_DIR}"
 
 set_env_var() {
-  key="$$1"
-  value="$$2"
+  key="$1"
+  value="$2"
   tmp_file="$${ENV_FILE}.tmp"
 
   if [ -f "$${ENV_FILE}" ]; then
@@ -113,7 +113,7 @@ login_to_ghcr() {
   fi
 
   echo "[deploy] Login to GHCR"
-  GHCR_TOKEN="$$(aws ssm get-parameter \
+  GHCR_TOKEN="$(aws ssm get-parameter \
     --region "${aws_region}" \
     --name "${ghcr_token_ssm_parameter_name}" \
     --with-decryption \
@@ -138,7 +138,7 @@ override_images() {
 }
 
 compose() {
-  docker compose --env-file "$${ENV_FILE}" -f "$${COMPOSE_FILE}" "$$@"
+  docker compose --env-file "$${ENV_FILE}" -f "$${COMPOSE_FILE}" "$@"
 }
 
 pull_images() {
