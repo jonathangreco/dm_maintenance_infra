@@ -65,17 +65,8 @@ data "aws_iam_policy_document" "github_actions_app_deploy" {
   }
 }
 
-resource "aws_iam_policy" "github_actions_app_deploy" {
-  name        = "${local.name_prefix}-github-actions-app-deploy"
-  description = "Permissions pour deployer l'application sur EC2 via SSM depuis GitHub Actions."
-  policy      = data.aws_iam_policy_document.github_actions_app_deploy.json
-
-  tags = {
-    Name = "${local.name_prefix}-github-actions-app-deploy"
-  }
-}
-
-resource "aws_iam_role_policy_attachment" "github_actions_app_deploy" {
-  role       = aws_iam_role.github_actions_app_deploy.name
-  policy_arn = aws_iam_policy.github_actions_app_deploy.arn
+resource "aws_iam_role_policy" "github_actions_app_deploy" {
+  name   = "${local.name_prefix}-github-actions-app-deploy"
+  role   = aws_iam_role.github_actions_app_deploy.id
+  policy = data.aws_iam_policy_document.github_actions_app_deploy.json
 }
