@@ -83,7 +83,7 @@ services:
       options:
         <<: *awslogs-options
         awslogs-stream: messenger-worker
-    command: php bin/console messenger:consume async --memory-limit=512M -vv
+    command: php bin/console --no-debug messenger:consume async --memory-limit=512M
     depends_on:
       app:
         condition: service_healthy
@@ -105,7 +105,7 @@ services:
       options:
         <<: *awslogs-options
         awslogs-stream: scheduler
-    command: php bin/console messenger:consume scheduler_default --memory-limit=256M -vv
+    command: php bin/console --no-debug messenger:consume scheduler_default --memory-limit=256M
     depends_on:
       app:
         condition: service_healthy
