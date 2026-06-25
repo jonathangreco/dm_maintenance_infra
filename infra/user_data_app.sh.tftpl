@@ -94,6 +94,28 @@ NGINX_IMAGE_ARG="$${2:-}"
 
 cd "$${APP_DIR}"
 
+refresh_env_file() {
+  echo "[deploy] Refresh env file from SSM"
+  tmp_file="$${ENV_FILE}.tmp"
+
+  aws ssm get-parameter \
+    --region "${aws_region}" \
+    --name "${app_env_ssm_parameter_name}" \
+    --with-decryption \
+    --query "Parameter.Value" \
+    --output text > "$${tmp_file}"
+
+  cat >> "$${tmp_file}" <<'ENV'
+APP_IMAGE=${app_image}
+NGINX_IMAGE=${nginx_image}
+NGINX_PORT=${nginx_port}
+AWS_REGION=${aws_region}
+CLOUDWATCH_DOCKER_LOG_GROUP=${docker_log_group_name}
+ENV
+
+  mv "$${tmp_file}" "$${ENV_FILE}"
+}
+
 set_env_var() {
   key="$1"
   value="$2"
@@ -158,6 +180,7 @@ prune_images() {
 
 refresh() {
   echo "[deploy] Mode refresh"
+  refresh_env_file
   login_to_ghcr
   override_images
   echo "[deploy] Current containers"
@@ -171,6 +194,7 @@ refresh() {
 
 release() {
   echo "[deploy] Mode release"
+  refresh_env_file
   login_to_ghcr
   override_images
   echo "[deploy] Current containers"
