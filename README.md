@@ -44,3 +44,12 @@ Le token GHCR est lu depuis :
 ```text
 /darkmira-maintenance/dev/ghcr/token
 ```
+
+``` AWS command to regenerate Github Token
+aws ssm put-parameter \
+--region eu-north-1 \
+--name /darkmira-maintenance/dev/ghcr/token \
+--type SecureString \
+--value 'TON_TOKEN_GITHUB' \
+--overwrite
+```

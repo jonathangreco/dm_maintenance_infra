@@ -186,23 +186,23 @@ variable "night_shutdown_timezone" {
 variable "night_shutdown_stop_schedule" {
   description = "Expression cron EventBridge Scheduler pour arreter EC2 et RDS."
   type        = string
-  default     = "cron(0 23 * * ? *)"
+  default     = "cron(0 23 ? * MON-FRI *)"
 }
 
 variable "night_shutdown_start_rds_schedule" {
   description = "Expression cron EventBridge Scheduler pour demarrer RDS avant l'EC2."
   type        = string
-  default     = "cron(30 7 * * ? *)"
+  default     = "cron(30 7 ? * MON-FRI *)"
 }
 
 variable "night_shutdown_start_ec2_schedule" {
   description = "Expression cron EventBridge Scheduler pour demarrer l'EC2 apres RDS."
   type        = string
-  default     = "cron(45 7 * * ? *)"
+  default     = "cron(45 7 ? * MON-FRI *)"
 }
 
 variable "night_shutdown_refresh_app_schedule" {
   description = "Expression cron EventBridge Scheduler pour repull/restart l'application apres le demarrage EC2."
   type        = string
-  default     = "cron(50 7 * * ? *)"
+  default     = "cron(50 7 ? * MON-FRI *)"
 }

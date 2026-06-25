@@ -22,7 +22,7 @@ cloudwatch_log_retention_days = 14
 
 night_shutdown_enabled              = true
 night_shutdown_timezone             = "Europe/Paris"
-night_shutdown_stop_schedule        = "cron(0 18 * * ? *)"
-night_shutdown_start_rds_schedule   = "cron(30 9 * * ? *)"
-night_shutdown_start_ec2_schedule   = "cron(45 9 * * ? *)"
-night_shutdown_refresh_app_schedule = "cron(50 9 * * ? *)"
+night_shutdown_stop_schedule        = "cron(0 18 ? * MON-FRI *)"
+night_shutdown_start_rds_schedule   = "cron(30 8 ? * MON-FRI *)"
+night_shutdown_start_ec2_schedule   = "cron(45 8 ? * MON-FRI *)"
+night_shutdown_refresh_app_schedule = "cron(50 8 ? * MON-FRI *)"
