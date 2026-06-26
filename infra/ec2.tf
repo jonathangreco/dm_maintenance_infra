@@ -83,6 +83,32 @@ resource "aws_iam_role_policy" "app_ec2_cloudwatch_logs" {
   })
 }
 
+resource "aws_iam_role_policy" "app_ec2_mysql_backups" {
+  name = "${local.name_prefix}-app-ec2-mysql-backups"
+  role = aws_iam_role.app_ec2.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = aws_s3_bucket.mysql_backups.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:AbortMultipartUpload",
+          "s3:PutObject"
+        ]
+        Resource = "${aws_s3_bucket.mysql_backups.arn}/mysql/*"
+      }
+    ]
+  })
+}
+
 resource "aws_iam_instance_profile" "app" {
   name = "${local.name_prefix}-app-instance-profile"
   role = aws_iam_role.app_ec2.name
@@ -119,6 +145,7 @@ resource "aws_instance" "app" {
     aws_region                    = var.aws_region
     ec2_log_group_name            = aws_cloudwatch_log_group.ec2.name
     docker_log_group_name         = aws_cloudwatch_log_group.docker.name
+    mysql_backup_bucket_name      = aws_s3_bucket.mysql_backups.bucket
     compose_file                  = templatefile("${path.module}/docker-compose.prod.yml.tftpl", {})
   })
 

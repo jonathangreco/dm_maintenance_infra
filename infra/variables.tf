@@ -206,3 +206,25 @@ variable "night_shutdown_refresh_app_schedule" {
   type        = string
   default     = "cron(50 7 ? * MON-FRI *)"
 }
+
+variable "night_shutdown_backup_timeout_seconds" {
+  description = "Temps maximum accorde au dump MySQL avant l'arret nocturne."
+  type        = number
+  default     = 600
+
+  validation {
+    condition     = var.night_shutdown_backup_timeout_seconds >= 60 && var.night_shutdown_backup_timeout_seconds <= 840
+    error_message = "night_shutdown_backup_timeout_seconds doit etre compris entre 60 et 840 secondes."
+  }
+}
+
+variable "mysql_backup_retention_days" {
+  description = "Nombre de jours de conservation des exports SQL MySQL dans S3."
+  type        = number
+  default     = 7
+
+  validation {
+    condition     = var.mysql_backup_retention_days >= 1
+    error_message = "mysql_backup_retention_days doit etre superieur ou egal a 1."
+  }
+}

@@ -7,7 +7,7 @@ APP_DIR="/opt/darkmira-maintenance"
 COMPOSE_VERSION="v2.29.7"
 
 dnf update -y
-dnf install -y amazon-cloudwatch-agent awscli docker
+dnf install -y amazon-cloudwatch-agent awscli docker mariadb105
 
 systemctl enable --now docker
 
@@ -238,5 +238,103 @@ exec /opt/darkmira-maintenance/deploy.sh release "$@"
 RELEASE
 
 chmod +x "$${APP_DIR}/deploy-release.sh"
+
+cat > "$${APP_DIR}/backup-mysql.sh" <<'BACKUP'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+APP_DIR="/opt/darkmira-maintenance"
+ENV_FILE="$${APP_DIR}/.env"
+BACKUP_BUCKET="${mysql_backup_bucket_name}"
+BACKUP_PREFIX="mysql"
+
+if [ ! -f "$${ENV_FILE}" ]; then
+  echo "[backup] Env file not found: $${ENV_FILE}" >&2
+  exit 1
+fi
+
+MYSQL_DUMP_BIN="$(command -v mysqldump || command -v mariadb-dump || true)"
+if [ -z "$${MYSQL_DUMP_BIN}" ]; then
+  echo "[backup] mysqldump or mariadb-dump is not installed" >&2
+  exit 1
+fi
+
+eval "$(python3 - "$${ENV_FILE}" <<'PY'
+import shlex
+import sys
+from urllib.parse import unquote, urlparse
+
+env_file = sys.argv[1]
+database_url = None
+
+with open(env_file, "r", encoding="utf-8") as handle:
+    for raw_line in handle:
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        if key == "DATABASE_URL":
+            database_url = value.strip().strip("'\"")
+            break
+
+if not database_url:
+    raise SystemExit("DATABASE_URL is missing from the env file")
+
+parsed = urlparse(database_url)
+db_name = unquote(parsed.path.lstrip("/"))
+if not parsed.hostname or not db_name:
+    raise SystemExit("DATABASE_URL must include host and database name")
+
+values = {
+    "DB_HOST": parsed.hostname,
+    "DB_PORT": str(parsed.port or 3306),
+    "DB_USER": unquote(parsed.username or ""),
+    "DB_PASSWORD": unquote(parsed.password or ""),
+    "DB_NAME": db_name,
+}
+
+for key, value in values.items():
+    print(f"{key}={shlex.quote(value)}")
+PY
+)"
+
+timestamp="$(date -u '+%Y%m%dT%H%M%SZ')"
+defaults_file="$(mktemp)"
+dump_file="$(mktemp "/tmp/$${DB_NAME}-$${timestamp}.XXXXXX.sql")"
+
+cleanup() {
+  rm -f "$${defaults_file}" "$${dump_file}"
+}
+trap cleanup EXIT
+
+chmod 600 "$${defaults_file}"
+cat > "$${defaults_file}" <<MYSQLCNF
+[client]
+host=$${DB_HOST}
+port=$${DB_PORT}
+user=$${DB_USER}
+password=$${DB_PASSWORD}
+MYSQLCNF
+
+echo "[backup] Dump $${DB_NAME} from $${DB_HOST}:$${DB_PORT}"
+"$${MYSQL_DUMP_BIN}" \
+  --defaults-extra-file="$${defaults_file}" \
+  --single-transaction \
+  --quick \
+  --routines \
+  --triggers \
+  --events \
+  --databases "$${DB_NAME}" > "$${dump_file}"
+
+backup_key="$${BACKUP_PREFIX}/$${DB_NAME}-$${timestamp}.sql"
+echo "[backup] Upload s3://$${BACKUP_BUCKET}/$${backup_key}"
+aws s3 cp "$${dump_file}" "s3://$${BACKUP_BUCKET}/$${backup_key}" \
+  --server-side-encryption AES256
+
+echo "[backup] Done"
+BACKUP
+
+chmod +x "$${APP_DIR}/backup-mysql.sh"
 
 "$${APP_DIR}/deploy.sh" release
