@@ -127,6 +127,7 @@ data "aws_iam_policy_document" "github_actions_terraform_permissions" {
       "s3:DeleteBucketPublicAccessBlock",
       "s3:DeleteBucketTagging",
       "s3:DeleteBucketOwnershipControls",
+      "s3:GetBucketAcl",
       "s3:GetBucketLocation",
       "s3:GetBucketPolicy",
       "s3:GetBucketPublicAccessBlock",
