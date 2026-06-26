@@ -116,6 +116,40 @@ data "aws_iam_policy_document" "github_actions_terraform_permissions" {
   }
 
   statement {
+    sid    = "TerraformMysqlBackupBucketsAccess"
+    effect = "Allow"
+    actions = [
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:DeleteBucketEncryption",
+      "s3:DeleteBucketLifecycle",
+      "s3:DeleteBucketPolicy",
+      "s3:DeleteBucketPublicAccessBlock",
+      "s3:DeleteBucketTagging",
+      "s3:DeleteBucketOwnershipControls",
+      "s3:GetBucketLocation",
+      "s3:GetBucketPolicy",
+      "s3:GetBucketPublicAccessBlock",
+      "s3:GetBucketTagging",
+      "s3:GetBucketVersioning",
+      "s3:GetBucketOwnershipControls",
+      "s3:GetEncryptionConfiguration",
+      "s3:GetLifecycleConfiguration",
+      "s3:ListBucket",
+      "s3:PutBucketPolicy",
+      "s3:PutBucketPublicAccessBlock",
+      "s3:PutBucketTagging",
+      "s3:PutBucketVersioning",
+      "s3:PutBucketOwnershipControls",
+      "s3:PutEncryptionConfiguration",
+      "s3:PutLifecycleConfiguration"
+    ]
+    resources = [
+      "arn:aws:s3:::dm-${var.environment}-mysql-backups-*"
+    ]
+  }
+
+  statement {
     sid    = "AllowStateLockFileAndReadWrite"
     effect = "Allow"
     actions = [
