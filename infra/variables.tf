@@ -40,6 +40,12 @@ variable "db_password" {
   sensitive   = true
 }
 
+variable "db_apply_immediately" {
+  description = "Applique immédiatement les modifications RDS au lieu d'attendre la fenêtre de maintenance."
+  type        = bool
+  default     = false
+}
+
 variable "vpc_cidr" {
   description = "CIDR principal du VPC."
   type        = string

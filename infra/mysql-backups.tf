@@ -1,5 +1,5 @@
 resource "aws_s3_bucket" "mysql_backups" {
-  bucket = "dm-${var.environment}-mysql-backups-${substr(md5(local.name_prefix), 0, 8)}"
+  bucket = "dm-${var.environment}-mysql-backups-${data.aws_caller_identity.current.account_id}"
 
   tags = {
     Name = "${local.name_prefix}-mysql-backups"

@@ -3,8 +3,9 @@ environment  = "dev"
 aws_region   = "eu-north-1"
 owner        = "jonathan"
 
-db_name     = "app"
-db_username = "app_user"
+db_name              = "app"
+db_username          = "app_user"
+db_apply_immediately = true
 
 enable_ssh       = true
 ssh_public_key   = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDA8v100dIh72bVCmxW8UuKB6+yU1Af2VzDwbVzNXq+X nataniel.greco@gmail.com"

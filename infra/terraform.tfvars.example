@@ -5,6 +5,7 @@ owner        = "jonathan"
 
 db_name     = "app"
 db_username = "app_user"
+db_apply_immediately = false
 
 # Ne mets jamais le vrai mot de passe dans Git.
 # Crée plutôt un fichier local terraform.tfvars ignoré par Git.

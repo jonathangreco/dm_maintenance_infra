@@ -330,7 +330,7 @@ echo "[backup] Dump $${DB_NAME} from $${DB_HOST}:$${DB_PORT}"
 backup_key="$${BACKUP_PREFIX}/$${DB_NAME}-$${timestamp}.sql"
 echo "[backup] Upload s3://$${BACKUP_BUCKET}/$${backup_key}"
 aws s3 cp "$${dump_file}" "s3://$${BACKUP_BUCKET}/$${backup_key}" \
-  --server-side-encryption AES256
+  --sse AES256
 
 echo "[backup] Done"
 BACKUP

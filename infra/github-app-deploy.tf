@@ -6,7 +6,7 @@ data "aws_iam_policy_document" "github_actions_app_deploy_trust" {
 
     principals {
       type        = "Federated"
-      identifiers = ["arn:aws:iam::387219500605:oidc-provider/token.actions.githubusercontent.com"]
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"]
     }
 
     condition {

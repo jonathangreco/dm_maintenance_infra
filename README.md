@@ -189,3 +189,42 @@ aws ssm put-parameter \
 ```
 
 Ensuite, relancer `/opt/darkmira-maintenance/deploy.sh refresh` ou `/opt/darkmira-maintenance/deploy-release.sh`. Ces scripts regenerent `/opt/darkmira-maintenance/.env` depuis SSM avant de relancer Docker Compose.
+
+## Backups MySQL vers S3
+
+Terraform cree un bucket S3 prive pour les exports SQL MySQL. Son nom est disponible avec :
+
+```bash
+terraform -chdir=infra output mysql_backup_bucket_name
+```
+
+Le script de backup est genere sur l'EC2 applicative :
+
+```text
+/opt/darkmira-maintenance/backup-mysql.sh
+```
+
+Il lit `DATABASE_URL` depuis `/opt/darkmira-maintenance/.env`, lance un dump MySQL, puis upload l'export dans :
+
+```text
+s3://<bucket>/mysql/<database>-<timestamp>.sql
+```
+
+L'upload utilise `aws s3 cp --sse AES256`. Ne pas utiliser `--server-side-encryption` avec `aws s3 cp` : cette option appartient a `s3api put-object` et fait echouer le backup avec `Unknown options`.
+
+Le backup automatique est declenche par la Lambda `darkmira-maintenance-dev-night-scheduler` avant l'arret nocturne de RDS, si `night_shutdown_enabled = true`.
+
+Verification manuelle :
+
+```bash
+aws ssm send-command \
+  --region eu-north-1 \
+  --instance-ids <ec2-instance-id> \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands":["/opt/darkmira-maintenance/backup-mysql.sh"],"executionTimeout":["900"]}'
+
+aws s3api list-objects-v2 \
+  --region eu-north-1 \
+  --bucket <bucket> \
+  --prefix mysql/
+```

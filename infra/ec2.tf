@@ -101,6 +101,7 @@ resource "aws_iam_role_policy" "app_ec2_mysql_backups" {
         Effect = "Allow"
         Action = [
           "s3:AbortMultipartUpload",
+          "s3:GetObject",
           "s3:PutObject"
         ]
         Resource = "${aws_s3_bucket.mysql_backups.arn}/mysql/*"
