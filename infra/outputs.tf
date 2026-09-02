@@ -56,3 +56,8 @@ output "agent_runner_registry_credentials_arn" {
   description = "Secret Secrets Manager utilise pour tirer les images privees. Nul quand toutes les images sont publiques."
   value       = var.enable_agent_runner && var.agent_runner_private_images ? aws_secretsmanager_secret.agent_runner_registry[0].arn : null
 }
+
+output "agent_runner_openai_parameter_arn" {
+  description = "ARN du parametre SSM portant la cle du modele."
+  value       = var.enable_agent_runner ? aws_ssm_parameter.agent_runner_openai_key[0].arn : null
+}

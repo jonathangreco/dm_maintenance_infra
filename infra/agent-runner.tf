@@ -364,3 +364,17 @@ resource "aws_iam_role_policy" "agent_runner_sweeper" {
     ]
   })
 }
+
+resource "aws_ssm_parameter" "agent_runner_openai_key" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  name  = "/${local.name_prefix}/agent-runner/openai-api-key"
+  type  = "SecureString"
+  value = "a-renseigner-hors-terraform"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+
+  tags = local.common_tags
+}
