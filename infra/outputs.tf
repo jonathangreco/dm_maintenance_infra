@@ -41,3 +41,18 @@ output "agent_runner_log_group" {
   description = "Groupe de journaux des taches de run."
   value       = var.enable_agent_runner ? aws_cloudwatch_log_group.agent_runner[0].name : null
 }
+
+output "agent_runner_execution_role_arn" {
+  description = "Role d'execution des taches de run (pull d'image, secrets, journaux)."
+  value       = var.enable_agent_runner ? aws_iam_role.agent_runner_execution[0].arn : null
+}
+
+output "agent_runner_task_role_arn" {
+  description = "Role porte par les conteneurs de run."
+  value       = var.enable_agent_runner ? aws_iam_role.agent_runner_task[0].arn : null
+}
+
+output "agent_runner_registry_credentials_arn" {
+  description = "Secret Secrets Manager utilise pour tirer les images privees. Nul quand toutes les images sont publiques."
+  value       = var.enable_agent_runner && var.agent_runner_private_images ? aws_secretsmanager_secret.agent_runner_registry[0].arn : null
+}
