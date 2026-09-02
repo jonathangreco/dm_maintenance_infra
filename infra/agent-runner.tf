@@ -210,3 +210,157 @@ resource "aws_iam_role_policy" "agent_runner_task_artifacts" {
     }]
   })
 }
+
+data "archive_file" "agent_runner_sweeper" {
+  type        = "zip"
+  source_file = "${path.module}/lambda/agent-runner-sweeper/index.py"
+  output_path = "${path.module}/.terraform/agent-runner-sweeper.zip"
+}
+
+resource "aws_lambda_function" "agent_runner_sweeper" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  function_name    = "${local.name_prefix}-agent-runner-sweeper"
+  role             = aws_iam_role.agent_runner_sweeper[0].arn
+  handler          = "index.handler"
+  runtime          = "python3.12"
+  timeout          = 60
+  filename         = data.archive_file.agent_runner_sweeper.output_path
+  source_code_hash = data.archive_file.agent_runner_sweeper.output_base64sha256
+
+  environment {
+    variables = {
+      CLUSTER_ARN      = aws_ecs_cluster.agent_runner[0].arn
+      MAX_TASK_MINUTES = tostring(var.agent_runner_max_task_minutes)
+    }
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_event_rule" "agent_runner_sweeper" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  name                = "${local.name_prefix}-agent-runner-sweeper"
+  schedule_expression = "rate(1 hour)"
+  tags                = local.common_tags
+}
+
+resource "aws_cloudwatch_event_target" "agent_runner_sweeper" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.agent_runner_sweeper[0].name
+  target_id = "lambda"
+  arn       = aws_lambda_function.agent_runner_sweeper[0].arn
+}
+
+resource "aws_lambda_permission" "agent_runner_sweeper" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.agent_runner_sweeper[0].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.agent_runner_sweeper[0].arn
+}
+
+# Modele : `aws_iam_role.night_scheduler_lambda`. Journal declare
+# explicitement, pour que sa retention soit maitrisee comme celle des autres
+# fonctions plutot que laissee a la creation implicite par Lambda.
+resource "aws_iam_role" "agent_runner_sweeper" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  name = "${local.name_prefix}-agent-runner-sweeper-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = merge(local.common_tags, {
+    Name = "${local.name_prefix}-agent-runner-sweeper-role"
+  })
+}
+
+resource "aws_cloudwatch_log_group" "agent_runner_sweeper" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  name              = "/aws/lambda/${local.name_prefix}-agent-runner-sweeper"
+  retention_in_days = var.agent_runner_log_retention_days
+
+  tags = merge(local.common_tags, {
+    Name = "${local.name_prefix}-agent-runner-sweeper-logs"
+  })
+}
+
+resource "aws_iam_role_policy" "agent_runner_sweeper_logs" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  name = "${local.name_prefix}-agent-runner-sweeper-logs"
+  role = aws_iam_role.agent_runner_sweeper[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+      Resource = "${aws_cloudwatch_log_group.agent_runner_sweeper[0].arn}:*"
+    }]
+  })
+}
+resource "aws_iam_role_policy" "agent_runner_sweeper" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  name = "${local.name_prefix}-agent-runner-sweeper"
+  role = aws_iam_role.agent_runner_sweeper[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      # `ListTasks` n'a pas de ressource au sens IAM : la restreindre a un ARN
+      # la refuse purement et simplement. La portee se joue par la condition de
+      # cluster — et c'est le smoke test, pas `terraform validate`, qui dira si
+      # la cle est effectivement supportee pour cette action. Si elle ne l'est
+      # pas, l'appel echoue en AccessDenied et la condition doit tomber : le
+      # sweeper ne listerait alors que ce que `list_tasks(cluster=...)` lui
+      # renvoie, ce qui reste borne par l'appel lui-meme.
+      {
+        Effect   = "Allow"
+        Action   = ["ecs:ListTasks"]
+        Resource = ["*"]
+        Condition = {
+          ArnEquals = {
+            "ecs:cluster" = aws_ecs_cluster.agent_runner[0].arn
+          }
+        }
+      },
+      # `DescribeTasks` et `StopTask` portent sur des taches : la ressource est
+      # une tache du cluster de runs, et rien d'autre. L'identifiant de tache
+      # etant aleatoire, le caractere generique final est inevitable — le
+      # segment de cluster, lui, ne l'est pas. Sans lui, cette Lambda pourrait
+      # arreter n'importe quelle tache ECS du compte, y compris applicative.
+      # La condition de cluster double la contrainte plutot que de s'y
+      # substituer : les deux tiennent.
+      {
+        Effect = "Allow"
+        Action = ["ecs:DescribeTasks", "ecs:StopTask"]
+        Resource = [
+          "${replace(aws_ecs_cluster.agent_runner[0].arn, ":cluster/", ":task/")}/*",
+        ]
+        Condition = {
+          ArnEquals = {
+            "ecs:cluster" = aws_ecs_cluster.agent_runner[0].arn
+          }
+        }
+      },
+    ]
+  })
+}
