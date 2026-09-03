@@ -135,20 +135,26 @@ resource "aws_iam_role_policy" "agent_runner_execution_secrets" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = ["ssm:GetParameters"]
-        Resource = [
-          "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${local.name_prefix}/agent-runner/*"
-        ]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = var.agent_runner_private_images ? [aws_secretsmanager_secret.agent_runner_registry[0].arn] : []
-      },
-    ]
+    Statement = concat(
+      [
+        {
+          Effect = "Allow"
+          Action = ["ssm:GetParameters"]
+          Resource = [
+            "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${local.name_prefix}/agent-runner/*"
+          ]
+        },
+      ],
+      var.agent_runner_private_images ? [
+        {
+          Effect = "Allow"
+          Action = ["secretsmanager:GetSecretValue"]
+          Resource = [
+            aws_secretsmanager_secret.agent_runner_registry[0].arn
+          ]
+        },
+      ] : [],
+    )
   })
 }
 
