@@ -30,3 +30,6 @@ night_shutdown_refresh_app_schedule   = "cron(50 8 ? * MON-FRI *)"
 night_shutdown_backup_timeout_seconds = 600
 
 mysql_backup_retention_days = 7
+
+enable_agent_runner         = true
+agent_runner_private_images = false
