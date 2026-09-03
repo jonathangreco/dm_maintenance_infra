@@ -162,3 +162,72 @@ resource "aws_lb_target_group_attachment" "app" {
   target_id        = aws_instance.app.id
   port             = var.app_port
 }
+
+resource "aws_iam_role_policy" "app_ec2_agent_runner" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  name = "${local.name_prefix}-app-agent-runner"
+  role = aws_iam_role.app_ec2.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      # `Register`/`DeregisterTaskDefinition` s'appliquent a une definition de
+      # tache, ressource qui n'appartient a aucun cluster : la cle de condition
+      # `ecs:cluster` n'existe pas pour elles. Conditionnees, ces deux actions
+      # sont refusees a l'execution — et `terraform validate` ne le dirait pas,
+      # car il ne connait pas la semantique des conditions IAM.
+      {
+        Effect   = "Allow"
+        Action   = ["ecs:RegisterTaskDefinition", "ecs:DeregisterTaskDefinition"]
+        Resource = ["*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ecs:RunTask", "ecs:StopTask", "ecs:DescribeTasks"]
+        Resource = ["*"]
+        Condition = {
+          ArnEquals = {
+            "ecs:cluster" = aws_ecs_cluster.agent_runner[0].arn
+          }
+        }
+      },
+      # `DescribeClusters` porte sur le cluster lui-meme : la ressource EST la
+      # contrainte, et la cle de condition `ecs:cluster` n'a pas de sens ici.
+      # Sans cette action, le healthcheck `--transport` de la Task 9 echoue en
+      # AccessDenied — un healthcheck rouge en permanence sur une plateforme
+      # par ailleurs saine.
+      {
+        Effect   = "Allow"
+        Action   = ["ecs:DescribeClusters"]
+        Resource = [aws_ecs_cluster.agent_runner[0].arn]
+      },
+      {
+        Effect = "Allow"
+        Action = ["iam:PassRole"]
+        Resource = [
+          aws_iam_role.agent_runner_execution[0].arn,
+          aws_iam_role.agent_runner_task[0].arn,
+        ]
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "ecs-tasks.amazonaws.com"
+          }
+        }
+      },
+      # `PutObject` : le worker depose le prompt et le schema de sortie du run
+      # avant de lancer la tache. Sans ce droit, le premier run echoue dans
+      # `publishRunInputs()`, avant meme l'enregistrement de la definition.
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
+        Resource = ["${aws_s3_bucket.agent_artifacts[0].arn}/runs/*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:GetLogEvents"]
+        Resource = ["${aws_cloudwatch_log_group.agent_runner[0].arn}:*"]
+      },
+    ]
+  })
+}

@@ -234,3 +234,26 @@ variable "mysql_backup_retention_days" {
     error_message = "mysql_backup_retention_days doit etre superieur ou egal a 1."
   }
 }
+variable "enable_agent_runner" {
+  description = "Active le socle ECS Fargate pour les runs de l'agent de code."
+  type        = bool
+  default     = false
+}
+
+variable "agent_runner_log_retention_days" {
+  description = "Retention des journaux des runs de l'agent."
+  type        = number
+  default     = 7
+}
+
+variable "agent_runner_private_images" {
+  description = "Cree le secret d identifiants de registre. A activer uniquement si l une des images de run est privee."
+  type        = bool
+  default     = false
+}
+
+variable "agent_runner_max_task_minutes" {
+  description = "Duree au-dela de laquelle une tache de run est consideree orpheline et arretee."
+  type        = number
+  default     = 90
+}

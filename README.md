@@ -228,3 +228,53 @@ aws s3api list-objects-v2 \
   --bucket <bucket> \
   --prefix mysql/
 ```
+
+## Runner d'agent (ECS Fargate)
+
+Socle inerte par défaut : tant que `enable_agent_runner` vaut `false`, aucune ressource
+n'est créée et `terraform plan` annonce `0 to add, 0 to change, 0 to destroy`.
+
+### Activation
+
+1. Poser `enable_agent_runner = true` dans le fichier de variables, puis `terraform apply`.
+
+2. **Renseigner le paramètre SSM de clé de modèle, obligatoirement avant le premier run.**
+   Terraform n'y dépose qu'un placeholder :
+
+   ```bash
+   aws ssm put-parameter --overwrite --type SecureString \
+     --name "/<project>-<env>/agent-runner/openai-api-key" \
+     --value "<cle>"
+   ```
+
+   `ignore_changes` garantit que la vraie valeur n'est jamais relue ni réécrite par
+   Terraform, et n'entre donc jamais dans le state. Entre l'`apply` et le `put-parameter`,
+   toute tâche lancée échouera à l'authentification.
+
+3. **Secret de registre**, uniquement si l'une des trois images — init, repli, projet
+   client — est privée sur GHCR : poser `agent_runner_private_images = true`, puis
+   remplacer le placeholder du secret Secrets Manager par un vrai jeton, au format
+   `{"username":"<utilisateur>","password":"<PAT lecture packages>"}`. Sans lui, la tâche
+   échoue au tirage d'image, avant tout code. Si toutes les images sont publiques, laisser
+   la variable à `false` : la sortie reste nulle, et `AGENT_RUNNER_REGISTRY_CREDENTIALS_ARN`
+   doit rester **vide** côté applicatif — renseignée avec le placeholder, elle ferait
+   échouer un tirage qui aurait réussi anonymement.
+
+### Ce qui n'entre pas dans la tâche
+
+**Aucun jeton GitHub.** Le dépôt parvient à la tâche par un snapshot déposé sur S3 par le
+worker — bundle Git plus patch de l'état non commité. La branche de fix n'existe que
+localement jusqu'au push final, et le second run porte sur des modifications non
+commitées : aucune référence distante ne pourrait les décrire. Le seul contact avec
+GitHub — clone bare, push, pull request — reste du côté du worker.
+
+### Réseau et coût
+
+- **Aucune passerelle NAT.** Les tâches sont placées dans les sous-réseaux publics avec IP
+  publique, dans un groupe de sécurité sans aucune règle d'entrée : elles sortent vers
+  l'API du modèle, le registre et S3, mais restent injoignables depuis l'extérieur.
+- Ordre de grandeur du coût : environ **0,05 $ par run** de trente minutes en 2 vCPU /
+  4 Go. Le poste dominant reste la consommation de tokens, supérieure d'un à deux ordres
+  de grandeur.
+- Les artefacts de run expirent au bout de 7 jours (règle de cycle de vie S3), les
+  journaux au bout de `agent_runner_log_retention_days`.
