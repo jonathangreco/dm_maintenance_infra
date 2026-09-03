@@ -160,6 +160,120 @@ data "aws_iam_policy_document" "github_actions_terraform_permissions" {
   }
 
   statement {
+    sid    = "TerraformAgentRunnerEcsClusterAccess"
+    effect = "Allow"
+    actions = [
+      "ecs:CreateCluster",
+      "ecs:DeleteCluster",
+      "ecs:DescribeClusters",
+      "ecs:ListTagsForResource",
+      "ecs:TagResource",
+      "ecs:UntagResource",
+      "ecs:UpdateClusterSettings"
+    ]
+    resources = [
+      "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:cluster/${local.name_prefix}-agent-runner"
+    ]
+  }
+
+  statement {
+    sid    = "TerraformAgentRunnerEventRuleAccess"
+    effect = "Allow"
+    actions = [
+      "events:DeleteRule",
+      "events:DescribeRule",
+      "events:ListTagsForResource",
+      "events:ListTargetsByRule",
+      "events:PutRule",
+      "events:PutTargets",
+      "events:RemoveTargets",
+      "events:TagResource",
+      "events:UntagResource"
+    ]
+    resources = [
+      "arn:aws:events:${var.aws_region}:${data.aws_caller_identity.current.account_id}:rule/${local.name_prefix}-agent-runner-sweeper"
+    ]
+  }
+
+  statement {
+    sid    = "TerraformAgentRunnerArtifactsBucketAccess"
+    effect = "Allow"
+    actions = [
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:DeleteBucketLifecycle",
+      "s3:DeleteBucketPublicAccessBlock",
+      "s3:DeleteBucketTagging",
+      "s3:GetBucketAcl",
+      "s3:GetBucketCORS",
+      "s3:GetBucketLifecycleConfiguration",
+      "s3:GetBucketLocation",
+      "s3:GetBucketLogging",
+      "s3:GetBucketObjectLockConfiguration",
+      "s3:GetBucketPolicy",
+      "s3:GetBucketPublicAccessBlock",
+      "s3:GetBucketRequestPayment",
+      "s3:GetBucketTagging",
+      "s3:GetBucketVersioning",
+      "s3:GetBucketWebsite",
+      "s3:GetEncryptionConfiguration",
+      "s3:GetLifecycleConfiguration",
+      "s3:GetReplicationConfiguration",
+      "s3:ListBucket",
+      "s3:PutLifecycleConfiguration",
+      "s3:PutBucketPublicAccessBlock",
+      "s3:PutBucketTagging"
+    ]
+    resources = [
+      "arn:aws:s3:::dm-${var.environment}-agent-artifacts-*"
+    ]
+  }
+
+  statement {
+    sid    = "TerraformAgentRunnerParametersAccess"
+    effect = "Allow"
+    actions = [
+      "ssm:AddTagsToResource",
+      "ssm:DeleteParameter",
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:ListTagsForResource",
+      "ssm:PutParameter",
+      "ssm:RemoveTagsFromResource"
+    ]
+    resources = [
+      "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${local.name_prefix}/agent-runner/*"
+    ]
+  }
+
+  statement {
+    sid       = "TerraformAgentRunnerDescribeParameters"
+    effect    = "Allow"
+    actions   = ["ssm:DescribeParameters"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "TerraformAgentRunnerRegistrySecretAccess"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:CreateSecret",
+      "secretsmanager:DeleteSecret",
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:GetResourcePolicy",
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:ListSecretVersionIds",
+      "secretsmanager:PutSecretValue",
+      "secretsmanager:TagResource",
+      "secretsmanager:UntagResource",
+      "secretsmanager:UpdateSecret"
+    ]
+    resources = [
+      "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${local.name_prefix}/agent-runner/*"
+    ]
+  }
+
+  statement {
     sid    = "AllowStateLockFileAndReadWrite"
     effect = "Allow"
     actions = [
