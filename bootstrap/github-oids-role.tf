@@ -18,7 +18,10 @@ data "aws_iam_policy_document" "github_actions_oidc_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:ref:refs/heads/${var.github_branch}"]
+      values = [
+        "repo:${var.github_repository}:ref:refs/heads/${var.github_branch}",
+        "repo:${var.github_repository}:pull_request",
+      ]
     }
   }
 }
