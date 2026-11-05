@@ -222,11 +222,42 @@ data "aws_iam_policy_document" "github_actions_terraform_permissions" {
       "s3:ListBucket",
       "s3:PutLifecycleConfiguration",
       "s3:PutBucketPublicAccessBlock",
-      "s3:PutBucketTagging"
+      "s3:PutBucketTagging",
+      "s3:PutEncryptionConfiguration",
+      "s3:DeleteBucketEncryption",
+      "s3:GetBucketOwnershipControls"
+    ]
+    # ANALYZER_BUCKET et DOCUMENTS_BUCKET de Darkmira Service.
+    resources = [
+      "arn:aws:s3:::dm-${var.environment}-agent-artifacts-*",
+      "arn:aws:s3:::dm-${var.environment}-documents-*"
+    ]
+  }
+
+  # Definitions de taches de Darkmira Analyseur (infra/analyzer-tasks.tf).
+  # Describe et Deregister ne prennent pas de ressource : "*".
+  statement {
+    sid    = "TerraformAnalyzerTaskDefinitionsRegister"
+    effect = "Allow"
+    actions = [
+      "ecs:RegisterTaskDefinition",
+      "ecs:TagResource",
+      "ecs:UntagResource",
+      "ecs:ListTagsForResource"
     ]
     resources = [
-      "arn:aws:s3:::dm-${var.environment}-agent-artifacts-*"
+      "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/darkmira-analyzer-*"
     ]
+  }
+
+  statement {
+    sid    = "TerraformAnalyzerTaskDefinitionsDescribe"
+    effect = "Allow"
+    actions = [
+      "ecs:DescribeTaskDefinition",
+      "ecs:DeregisterTaskDefinition"
+    ]
+    resources = ["*"]
   }
 
   statement {
