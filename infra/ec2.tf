@@ -83,33 +83,6 @@ resource "aws_iam_role_policy" "app_ec2_cloudwatch_logs" {
   })
 }
 
-resource "aws_iam_role_policy" "app_ec2_mysql_backups" {
-  name = "${local.name_prefix}-app-ec2-mysql-backups"
-  role = aws_iam_role.app_ec2.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:ListBucket"
-        ]
-        Resource = aws_s3_bucket.mysql_backups.arn
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:AbortMultipartUpload",
-          "s3:GetObject",
-          "s3:PutObject"
-        ]
-        Resource = "${aws_s3_bucket.mysql_backups.arn}/mysql/*"
-      }
-    ]
-  })
-}
-
 resource "aws_iam_instance_profile" "app" {
   name = "${local.name_prefix}-app-instance-profile"
   role = aws_iam_role.app_ec2.name
@@ -146,8 +119,15 @@ resource "aws_instance" "app" {
     aws_region                    = var.aws_region
     ec2_log_group_name            = aws_cloudwatch_log_group.ec2.name
     docker_log_group_name         = aws_cloudwatch_log_group.docker.name
-    mysql_backup_bucket_name      = aws_s3_bucket.mysql_backups.bucket
     compose_file                  = templatefile("${path.module}/docker-compose.prod.yml.tftpl", {})
+    default_uri                   = "http://${aws_lb.app.dns_name}"
+    trusted_proxies               = var.vpc_cidr
+    mail_from                     = var.mail_from
+    analyzer_cluster              = var.enable_agent_runner ? aws_ecs_cluster.agent_runner[0].name : ""
+    analyzer_subnets              = join(",", [for subnet in aws_subnet.public : subnet.id])
+    analyzer_security_group       = var.enable_agent_runner ? aws_security_group.agent_runner[0].id : ""
+    analyzer_bucket               = var.enable_agent_runner ? aws_s3_bucket.agent_artifacts[0].bucket : ""
+    documents_bucket              = aws_s3_bucket.documents.bucket
   })
 
   tags = {
@@ -172,35 +152,30 @@ resource "aws_iam_role_policy" "app_ec2_agent_runner" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # `Register`/`DeregisterTaskDefinition` s'appliquent a une definition de
-      # tache, ressource qui n'appartient a aucun cluster : la cle de condition
-      # `ecs:cluster` n'existe pas pour elles. Conditionnees, ces deux actions
-      # sont refusees a l'execution — et `terraform validate` ne le dirait pas,
-      # car il ne connait pas la semantique des conditions IAM.
+      # Les definitions de taches sont declarees par Terraform
+      # (analyzer-tasks.tf) : l'application ne fait que les lancer.
       {
-        Effect   = "Allow"
-        Action   = ["ecs:RegisterTaskDefinition", "ecs:DeregisterTaskDefinition"]
-        Resource = ["*"]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["ecs:RunTask", "ecs:StopTask", "ecs:DescribeTasks"]
-        Resource = ["*"]
+        Effect = "Allow"
+        Action = ["ecs:RunTask"]
+        Resource = [
+          for family in keys(aws_ecs_task_definition.analyzer) :
+          "arn:aws:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:task-definition/${family}:*"
+        ]
         Condition = {
           ArnEquals = {
             "ecs:cluster" = aws_ecs_cluster.agent_runner[0].arn
           }
         }
       },
-      # `DescribeClusters` porte sur le cluster lui-meme : la ressource EST la
-      # contrainte, et la cle de condition `ecs:cluster` n'a pas de sens ici.
-      # Sans cette action, le healthcheck `--transport` de la Task 9 echoue en
-      # AccessDenied — un healthcheck rouge en permanence sur une plateforme
-      # par ailleurs saine.
       {
         Effect   = "Allow"
-        Action   = ["ecs:DescribeClusters"]
-        Resource = [aws_ecs_cluster.agent_runner[0].arn]
+        Action   = ["ecs:DescribeTasks"]
+        Resource = ["${replace(aws_ecs_cluster.agent_runner[0].arn, ":cluster/", ":task/")}/*"]
+        Condition = {
+          ArnEquals = {
+            "ecs:cluster" = aws_ecs_cluster.agent_runner[0].arn
+          }
+        }
       },
       {
         Effect = "Allow"
@@ -215,18 +190,52 @@ resource "aws_iam_role_policy" "app_ec2_agent_runner" {
           }
         }
       },
-      # `PutObject` : le worker depose le prompt et le schema de sortie du run
-      # avant de lancer la tache. Sans ce droit, le premier run echoue dans
-      # `publishRunInputs()`, avant meme l'enregistrement de la definition.
+      # Dossiers d'etape : l'application ecrit la demande, le bundle et les
+      # secrets, lit la sortie ; jamais prepare/ (le code du client ne passe
+      # pas par l'EC2). Flysystem envoie toujours une ACL
+      # (bucket-owner-full-control), d'ou PutObjectAcl ; il ecrit aussi le
+      # marqueur de dossier runs/<etape>/.
       {
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
-        Resource = ["${aws_s3_bucket.agent_artifacts[0].arn}/runs/*"]
+        Effect = "Allow"
+        Action = ["s3:PutObject", "s3:PutObjectAcl", "s3:AbortMultipartUpload"]
+        Resource = [
+          "${aws_s3_bucket.agent_artifacts[0].arn}/runs/*/input/*",
+          "${aws_s3_bucket.agent_artifacts[0].arn}/runs/*/secrets/*",
+          "${aws_s3_bucket.agent_artifacts[0].arn}/runs/*/",
+        ]
       },
       {
         Effect   = "Allow"
-        Action   = ["logs:GetLogEvents"]
-        Resource = ["${aws_cloudwatch_log_group.agent_runner[0].arn}:*"]
+        Action   = ["s3:PutObjectTagging"]
+        Resource = ["${aws_s3_bucket.agent_artifacts[0].arn}/runs/*/secrets/*"]
+      },
+      {
+        Effect = "Allow"
+        Action = ["s3:GetObject"]
+        Resource = [
+          "${aws_s3_bucket.agent_artifacts[0].arn}/runs/*/input/*",
+          "${aws_s3_bucket.agent_artifacts[0].arn}/runs/*/output/*",
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:DeleteObject"]
+        Resource = ["${aws_s3_bucket.agent_artifacts[0].arn}/runs/*/secrets/*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [aws_s3_bucket.agent_artifacts[0].arn]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:PutObjectAcl", "s3:AbortMultipartUpload", "s3:DeleteObject"]
+        Resource = ["${aws_s3_bucket.documents.arn}/*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [aws_s3_bucket.documents.arn]
       },
     ]
   })

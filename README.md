@@ -1,6 +1,6 @@
 # AWS Symfony POC IaC
 
-Ce dépôt contient l'infrastructure as code du Projet de maintenance Darkmira.
+Ce dépôt contient l'infrastructure as code de Darkmira Service (application PHP/Symfony) et de Darkmira Analyseur (tâches Fargate).
 
 ## Objectif
 
@@ -13,33 +13,52 @@ Internet
   -> Application Load Balancer public
   -> EC2 applicative
   -> Docker / Symfony
-  -> RDS MySQL privé
+  -> RDS PostgreSQL 17 privé
+  -> ECS Fargate : tâches de Darkmira Analyseur, dossiers d'étape sur S3
 ```
 
 ## Runtime applicatif EC2
 
-L'EC2 installe Docker au boot puis lance le compose prod depuis `infra/docker-compose.prod.yml.tftpl`.
-Ce compose est derive de `/home/john/www/darkmira-maintenance/docker-compose.prod.yml`, avec RDS a la place du conteneur MySQL local.
+L'EC2 installe Docker au boot, rend `infra/docker-compose.prod.yml.tftpl`
+(`app`, `nginx`, `analyzer-worker`, `mail-worker`, `mailer`) et lance
+`deploy.sh release` (migrations comprises). Chaque service charge
+`/opt/darkmira-maintenance/.env`.
 
-Le fichier d'environnement runtime doit exister dans SSM SecureString :
-
-```text
-/darkmira-maintenance/dev/app/env
-```
-
-Il doit contenir au minimum les variables requises par l'application :
+Le paramètre SSM SecureString `/darkmira-maintenance/dev/app/env` porte
+**les secrets seulement** (jamais dans Terraform) :
 
 ```text
-APP_SECRET=...
-DATABASE_URL=...
-OPENAI_API_KEY=...
-GITHUB_TOKEN=...
-GMAIL_OAUTH_CLIENT_ID=...
-GMAIL_OAUTH_CLIENT_SECRET=...
-GMAIL_OAUTH_REFRESH_TOKEN=...
+APP_SECRET=<32 octets aléatoires en hexadécimal>
+APP_SECRETS_ENCRYPTION_KEY=<32 octets en base64 : openssl rand -base64 32>
+DATABASE_URL="postgresql://app_user:<mot de passe RDS>@<endpoint RDS>:5432/app?serverVersion=17&charset=utf8"
+LOCK_DSN="postgresql+advisory://app_user:<mot de passe RDS>@<endpoint RDS>:5432/app"
 ```
 
-Le token GHCR est lu depuis :
+`user_data` y ajoute ce que Terraform connaît : images, `AWS_REGION`,
+`DEFAULT_URI` (adresse HTTP de l'ALB), `TRUSTED_PROXIES` (CIDR du VPC),
+`MAILER_DSN` (Mailpit), `MAILER_FROM`, `ANALYZER_ECS_*`, `ANALYZER_BUCKET`,
+`DOCUMENTS_BUCKET`.
+
+Sans domaine, aucun e-mail ne part : Mailpit les garde. Les lire :
+`ssh -L 8025:localhost:8025 ec2-user@<ip publique>`, puis
+http://localhost:8025.
+
+### Premier déploiement
+
+1. Images : depuis `~/www/darkmira_analyseur`, `make prepare-image` ; puis,
+   depuis `~/www/Darkmira_service`, `docker login ghcr.io` et `make publish`.
+2. `terraform -chdir=infra apply -var-file=dev.tfvars` (mot de passe RDS par
+   `TF_VAR_db_password`). La base MySQL de l'ancien POC est remplacée par
+   PostgreSQL : ses données sont perdues.
+3. Secret de registre des tâches : remplacer le placeholder du secret
+   Secrets Manager `<project>-<env>/agent-runner/registry` par
+   `{"username":"jonathangreco","password":"<PAT read:packages>"}`.
+4. Paramètre SSM `app/env` (ci-dessus), avec l'endpoint RDS de
+   `terraform output`.
+5. Sur l'EC2 : `/opt/darkmira-maintenance/deploy-release.sh`, puis
+   `docker compose --env-file .env -f docker-compose.prod.yml run --rm app php bin/console app:create-super-admin`.
+
+Le token GHCR de l'EC2 est lu depuis :
 
 ```text
 /darkmira-maintenance/dev/ghcr/token
@@ -76,16 +95,13 @@ app_env_ssm_parameter_name    = "/darkmira-maintenance/dev/app/env"
 ghcr_token_ssm_parameter_name = "/darkmira-maintenance/dev/ghcr/token"
 ```
 
-Le parametre `/darkmira-maintenance/dev/app/env` doit etre un `SecureString` contenant un fichier `.env` complet, par exemple :
+Le parametre `/darkmira-maintenance/dev/app/env` doit etre un `SecureString` contenant les secrets de Darkmira Service (voir « Runtime applicatif EC2 ») :
 
 ```env
 APP_SECRET=...
+APP_SECRETS_ENCRYPTION_KEY=...
 DATABASE_URL=...
-OPENAI_API_KEY=...
-GITHUB_TOKEN=...
-GMAIL_OAUTH_CLIENT_ID=...
-GMAIL_OAUTH_CLIENT_SECRET=...
-GMAIL_OAUTH_REFRESH_TOKEN=...
+LOCK_DSN=...
 ```
 
 Le parametre `/darkmira-maintenance/dev/ghcr/token` contient seulement le token GitHub utilise pour `docker login ghcr.io`.
@@ -190,91 +206,22 @@ aws ssm put-parameter \
 
 Ensuite, relancer `/opt/darkmira-maintenance/deploy.sh refresh` ou `/opt/darkmira-maintenance/deploy-release.sh`. Ces scripts regenerent `/opt/darkmira-maintenance/.env` depuis SSM avant de relancer Docker Compose.
 
-## Backups MySQL vers S3
+## Darkmira Analyseur (ECS Fargate)
 
-Terraform cree un bucket S3 prive pour les exports SQL MySQL. Son nom est disponible avec :
+Activé par `enable_agent_runner = true`. Une définition de tâche par
+commande (`darkmira-analyzer-fetch|install|index|plan|read`,
+`infra/analyzer-tasks.tf`), lancée par l'application (`EcsAnalyzerRunner`)
+sur le cluster `<project>-<env>-agent-runner`. Le dossier d'étape vit sous
+`s3://<ANALYZER_BUCKET>/runs/<étape>/` ; les conteneurs `init`, `analyzer`,
+`upload` (et `progress` pour `read`) le rapatrient, l'exécutent et le
+renvoient.
 
-```bash
-terraform -chdir=infra output mysql_backup_bucket_name
-```
-
-Le script de backup est genere sur l'EC2 applicative :
-
-```text
-/opt/darkmira-maintenance/backup-mysql.sh
-```
-
-Il lit `DATABASE_URL` depuis `/opt/darkmira-maintenance/.env`, lance un dump MySQL, puis upload l'export dans :
-
-```text
-s3://<bucket>/mysql/<database>-<timestamp>.sql
-```
-
-L'upload utilise `aws s3 cp --sse AES256`. Ne pas utiliser `--server-side-encryption` avec `aws s3 cp` : cette option appartient a `s3api put-object` et fait echouer le backup avec `Unknown options`.
-
-Le backup automatique est declenche par la Lambda `darkmira-maintenance-dev-night-scheduler` avant l'arret nocturne de RDS, si `night_shutdown_enabled = true`.
-
-Verification manuelle :
-
-```bash
-aws ssm send-command \
-  --region eu-north-1 \
-  --instance-ids <ec2-instance-id> \
-  --document-name AWS-RunShellScript \
-  --parameters '{"commands":["/opt/darkmira-maintenance/backup-mysql.sh"],"executionTimeout":["900"]}'
-
-aws s3api list-objects-v2 \
-  --region eu-north-1 \
-  --bucket <bucket> \
-  --prefix mysql/
-```
-
-## Runner d'agent (ECS Fargate)
-
-Socle inerte par défaut : tant que `enable_agent_runner` vaut `false`, aucune ressource
-n'est créée et `terraform plan` annonce `0 to add, 0 to change, 0 to destroy`.
-
-### Activation
-
-1. Poser `enable_agent_runner = true` dans le fichier de variables, puis `terraform apply`.
-
-2. **Renseigner le paramètre SSM de clé de modèle, obligatoirement avant le premier run.**
-   Terraform n'y dépose qu'un placeholder :
-
-   ```bash
-   aws ssm put-parameter --overwrite --type SecureString \
-     --name "/<project>-<env>/agent-runner/openai-api-key" \
-     --value "<cle>"
-   ```
-
-   `ignore_changes` garantit que la vraie valeur n'est jamais relue ni réécrite par
-   Terraform, et n'entre donc jamais dans le state. Entre l'`apply` et le `put-parameter`,
-   toute tâche lancée échouera à l'authentification.
-
-3. **Secret de registre**, uniquement si l'une des trois images — init, repli, projet
-   client — est privée sur GHCR : poser `agent_runner_private_images = true`, puis
-   remplacer le placeholder du secret Secrets Manager par un vrai jeton, au format
-   `{"username":"<utilisateur>","password":"<PAT lecture packages>"}`. Sans lui, la tâche
-   échoue au tirage d'image, avant tout code. Si toutes les images sont publiques, laisser
-   la variable à `false` : la sortie reste nulle, et `AGENT_RUNNER_REGISTRY_CREDENTIALS_ARN`
-   doit rester **vide** côté applicatif — renseignée avec le placeholder, elle ferait
-   échouer un tirage qui aurait réussi anonymement.
-
-### Ce qui n'entre pas dans la tâche
-
-**Aucun jeton GitHub.** Le dépôt parvient à la tâche par un snapshot déposé sur S3 par le
-worker — bundle Git plus patch de l'état non commité. La branche de fix n'existe que
-localement jusqu'au push final, et le second run porte sur des modifications non
-commitées : aucune référence distante ne pourrait les décrire. Le seul contact avec
-GitHub — clone bare, push, pull request — reste du côté du worker.
-
-### Réseau et coût
-
-- **Aucune passerelle NAT.** Les tâches sont placées dans les sous-réseaux publics avec IP
-  publique, dans un groupe de sécurité sans aucune règle d'entrée : elles sortent vers
-  l'API du modèle, le registre et S3, mais restent injoignables depuis l'extérieur.
-- Ordre de grandeur du coût : environ **0,05 $ par run** de trente minutes en 2 vCPU /
-  4 Go. Le poste dominant reste la consommation de tokens, supérieure d'un à deux ordres
-  de grandeur.
-- Les artefacts de run expirent au bout de 7 jours (règle de cycle de vie S3), les
-  journaux au bout de `agent_runner_log_retention_days`.
+- Réseau : sous-réseaux publics, IP publique, aucune entrée, sortie 443
+  seulement ; pas de NAT. `index` sort aussi : Fargate tire l'image par
+  l'interface de la tâche (dette nommée côté Darkmira Service).
+- Secrets (clé du fournisseur d'IA) : jamais dans `RunTask` ; un objet
+  `runs/<étape>/secrets/<exécution>.env` étiqueté `kind=secrets`, supprimé par
+  l'application, effacé après un jour s'il reste.
+- La Lambda `agent-runner-sweeper` arrête une tâche au-delà de
+  `agent_runner_max_task_minutes`.
+- Journaux : `/aws/ecs/<project>-<env>-agent-runner`.

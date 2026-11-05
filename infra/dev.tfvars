@@ -11,8 +11,9 @@ enable_ssh       = true
 ssh_public_key   = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDA8v100dIh72bVCmxW8UuKB6+yU1Af2VzDwbVzNXq+X nataniel.greco@gmail.com"
 ssh_allowed_cidr = "90.38.211.210/32"
 
-app_container_image = "ghcr.io/jonathangreco/darkmira-maintenance-app:prod"
-app_nginx_image     = "ghcr.io/jonathangreco/darkmira-maintenance-nginx:prod"
+app_container_image = "ghcr.io/jonathangreco/darkmira-service-app:prod"
+app_nginx_image     = "ghcr.io/jonathangreco/darkmira-service-nginx:prod"
+analyzer_image      = "ghcr.io/jonathangreco/darkmira-analyzer:prod"
 ghcr_login_enabled  = true
 ghcr_username       = "jonathangreco"
 
@@ -21,15 +22,12 @@ ghcr_token_ssm_parameter_name = "/darkmira-maintenance/dev/ghcr/token"
 
 cloudwatch_log_retention_days = 14
 
-night_shutdown_enabled                = true
-night_shutdown_timezone               = "Europe/Paris"
-night_shutdown_stop_schedule          = "cron(0 18 ? * MON-FRI *)"
-night_shutdown_start_rds_schedule     = "cron(30 8 ? * MON-FRI *)"
-night_shutdown_start_ec2_schedule     = "cron(45 8 ? * MON-FRI *)"
-night_shutdown_refresh_app_schedule   = "cron(50 8 ? * MON-FRI *)"
-night_shutdown_backup_timeout_seconds = 600
-
-mysql_backup_retention_days = 7
+night_shutdown_enabled              = true
+night_shutdown_timezone             = "Europe/Paris"
+night_shutdown_stop_schedule        = "cron(0 18 ? * MON-FRI *)"
+night_shutdown_start_rds_schedule   = "cron(30 8 ? * MON-FRI *)"
+night_shutdown_start_ec2_schedule   = "cron(45 8 ? * MON-FRI *)"
+night_shutdown_refresh_app_schedule = "cron(50 8 ? * MON-FRI *)"
 
 enable_agent_runner         = true
-agent_runner_private_images = false
+agent_runner_private_images = true

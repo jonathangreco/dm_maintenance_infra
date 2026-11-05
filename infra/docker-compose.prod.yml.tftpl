@@ -1,125 +1,49 @@
-x-app-env: &app-env
-  APP_ENV: prod
-  APP_DEBUG: "0"
-  APP_SECRET: $${APP_SECRET:?APP_SECRET is required}
-  DATABASE_URL: $${DATABASE_URL:?DATABASE_URL is required}
-  OPENAI_API_KEY: $${OPENAI_API_KEY:?OPENAI_API_KEY is required}
-  OPENAI_MODEL: $${OPENAI_MODEL:-gpt-4.1-mini}
-  OPENAI_MAX_TOKENS: $${OPENAI_MAX_TOKENS:-800}
-  OPENAI_TEMPERATURE: $${OPENAI_TEMPERATURE:-0.1}
-  CODE_AGENT: $${CODE_AGENT:-codex}
-  CODEX_MODEL: $${CODEX_MODEL:-gpt-5.3-codex}
-  AGENT_RUNNER: $${AGENT_RUNNER:-local}
-  AGENT_RUNNER_CLUSTER_ARN: $${AGENT_RUNNER_CLUSTER_ARN:-}
-  AGENT_RUNNER_SUBNET_IDS: $${AGENT_RUNNER_SUBNET_IDS:-}
-  AGENT_RUNNER_SECURITY_GROUP_ID: $${AGENT_RUNNER_SECURITY_GROUP_ID:-}
-  AGENT_RUNNER_EXECUTION_ROLE_ARN: $${AGENT_RUNNER_EXECUTION_ROLE_ARN:-}
-  AGENT_RUNNER_TASK_ROLE_ARN: $${AGENT_RUNNER_TASK_ROLE_ARN:-}
-  AGENT_RUNNER_LOG_GROUP: $${AGENT_RUNNER_LOG_GROUP:-}
-  AGENT_RUNNER_REGION: $${AGENT_RUNNER_REGION:-eu-north-1}
-  AGENT_RUNNER_ARTIFACTS_BUCKET: $${AGENT_RUNNER_ARTIFACTS_BUCKET:-}
-  AGENT_RUNNER_OPENAI_PARAMETER_ARN: $${AGENT_RUNNER_OPENAI_PARAMETER_ARN:-}
-  AGENT_RUNNER_REGISTRY_CREDENTIALS_ARN: $${AGENT_RUNNER_REGISTRY_CREDENTIALS_ARN:-}
-  AGENT_RUNNER_INIT_IMAGE: $${AGENT_RUNNER_INIT_IMAGE:-}
-  AGENT_RUNNER_FALLBACK_IMAGE: $${AGENT_RUNNER_FALLBACK_IMAGE:-}
-  AGENT_RUNNER_CPU: $${AGENT_RUNNER_CPU:-2048}
-  AGENT_RUNNER_MEMORY_MIB: $${AGENT_RUNNER_MEMORY_MIB:-4096}
-  AGENT_RUNNER_POLL_SECONDS: $${AGENT_RUNNER_POLL_SECONDS:-5}
-  AUTOFIX_GIT_USER_NAME: $${AUTOFIX_GIT_USER_NAME:-Darkmira Bot}
-  AUTOFIX_GIT_USER_EMAIL: $${AUTOFIX_GIT_USER_EMAIL:-bot@darkmira.fr}
-  GITHUB_TOKEN: $${GITHUB_TOKEN:?GITHUB_TOKEN is required}
-  MAILBOX_MAX_RESULTS: $${MAILBOX_MAX_RESULTS:-25}
-  GMAIL_OAUTH_CLIENT_ID: $${GMAIL_OAUTH_CLIENT_ID:?GMAIL_OAUTH_CLIENT_ID is required}
-  GMAIL_OAUTH_CLIENT_SECRET: $${GMAIL_OAUTH_CLIENT_SECRET:?GMAIL_OAUTH_CLIENT_SECRET is required}
-  GMAIL_OAUTH_REFRESH_TOKEN: $${GMAIL_OAUTH_REFRESH_TOKEN:?GMAIL_OAUTH_REFRESH_TOKEN is required}
-  GMAIL_OAUTH_REDIRECT_URI: $${GMAIL_OAUTH_REDIRECT_URI:-http://localhost:8080/oauth2callback}
-  AWS_S3_ENDPOINT: http://minio:9000
-  AWS_S3_BUCKET: $${AWS_S3_BUCKET:-darkmira-bundles}
-  AWS_S3_REGION: $${AWS_S3_REGION:-eu-west-3}
-  AWS_S3_ACCESS_KEY: $${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
-  AWS_S3_SECRET_KEY: $${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
-  AWS_S3_PATH_STYLE: "true"
+# Darkmira Service. Chaque service charge le .env rendu par user_data
+# (parametre SSM des secrets + valeurs connues de Terraform). Aucun volume de
+# donnees : tout etat vit en base (RDS PostgreSQL) ou sur S3. Les migrations
+# n'ont qu'une voie : deploy.sh release.
 
 x-awslogs-options: &awslogs-options
   awslogs-region: $${AWS_REGION:?AWS_REGION is required}
   awslogs-group: $${CLOUDWATCH_DOCKER_LOG_GROUP:?CLOUDWATCH_DOCKER_LOG_GROUP is required}
   awslogs-create-group: "false"
 
-x-awslogs: &awslogs
-  driver: awslogs
-  options:
-    <<: *awslogs-options
+x-app: &app
+  image: $${APP_IMAGE:?APP_IMAGE is required}
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    APP_ENV: prod
+    APP_DEBUG: "0"
+    RUN_MIGRATIONS: "0"
+  networks:
+    - internal
 
 services:
   app:
-    image: $${APP_IMAGE:-ghcr.io/jonathangreco/darkmira-maintenance-app:prod}
-    restart: unless-stopped
+    <<: *app
     logging:
-      <<: *awslogs
+      driver: awslogs
       options:
         <<: *awslogs-options
         awslogs-stream: app
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      RUN_MIGRATIONS: "0"
+      WARMUP_CACHE: "1"
     healthcheck:
       test: ["CMD", "php-fpm", "-t"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
-    depends_on:
-      minio-init:
-        condition: service_completed_successfully
-    environment:
-      <<: *app-env
-      RUN_MIGRATIONS: $${RUN_MIGRATIONS:-0}
-      WARMUP_CACHE: $${WARMUP_CACHE:-1}
-    volumes:
-      - /var/darkmira/config:/var/darkmira/config:ro
-      - repos_data:/var/darkmira/repos
-    networks:
-      - internal
-
-  minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    restart: unless-stopped
-    command: server /data
-    environment:
-      MINIO_ROOT_USER: $${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
-      MINIO_ROOT_PASSWORD: $${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - internal
-
-  minio-init:
-    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
-    restart: "no"
-    depends_on:
-      minio:
-        condition: service_healthy
-    environment:
-      MINIO_ROOT_USER: $${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
-      MINIO_ROOT_PASSWORD: $${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
-      AWS_S3_BUCKET: $${AWS_S3_BUCKET:-darkmira-bundles}
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        mc alias set local http://minio:9000 "$$${MINIO_ROOT_USER}" "$$${MINIO_ROOT_PASSWORD}"
-        mc mb --ignore-existing "local/$$${AWS_S3_BUCKET}"
-    networks:
-      - internal
 
   nginx:
-    image: $${NGINX_IMAGE:-ghcr.io/jonathangreco/darkmira-maintenance-nginx:prod}
+    image: $${NGINX_IMAGE:?NGINX_IMAGE is required}
     restart: unless-stopped
     logging:
-      <<: *awslogs
+      driver: awslogs
       options:
         <<: *awslogs-options
         awslogs-stream: nginx
@@ -137,52 +61,55 @@ services:
     networks:
       - internal
 
-  messenger-worker:
-    image: $${APP_IMAGE:-ghcr.io/jonathangreco/darkmira-maintenance-app:prod}
-    restart: unless-stopped
+  # Un seul consommateur : le verrou optimiste d'une tentative refuse un
+  # second worker concurrent sans le rendre utile.
+  analyzer-worker:
+    <<: *app
+    command: ["php", "bin/console", "--no-debug", "messenger:consume", "analyzer", "scheduler_analyzer", "--memory-limit=512M"]
     logging:
-      <<: *awslogs
+      driver: awslogs
       options:
         <<: *awslogs-options
-        awslogs-stream: messenger-worker
-    command: php bin/console --no-debug messenger:consume async --memory-limit=512M
+        awslogs-stream: analyzer-worker
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      RUN_MIGRATIONS: "0"
+      WARMUP_CACHE: "0"
     depends_on:
       app:
         condition: service_healthy
-    environment:
-      <<: *app-env
-      RUN_MIGRATIONS: "0"
-      WARMUP_CACHE: "0"
-    volumes:
-      - /var/darkmira/config:/var/darkmira/config:ro
-      - repos_data:/var/darkmira/repos
-    networks:
-      - internal
 
-  scheduler:
-    image: $${APP_IMAGE:-ghcr.io/jonathangreco/darkmira-maintenance-app:prod}
-    restart: unless-stopped
+  # Envoie les e-mails et tient le planning par defaut (fin des mandats,
+  # catalogue des modeles d'IA).
+  mail-worker:
+    <<: *app
+    command: ["php", "bin/console", "--no-debug", "messenger:consume", "mail", "scheduler_default", "--memory-limit=256M"]
     logging:
-      <<: *awslogs
+      driver: awslogs
       options:
         <<: *awslogs-options
-        awslogs-stream: scheduler
-    command: php bin/console --no-debug messenger:consume scheduler_default --memory-limit=256M
+        awslogs-stream: mail-worker
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      RUN_MIGRATIONS: "0"
+      WARMUP_CACHE: "0"
     depends_on:
       app:
         condition: service_healthy
-    environment:
-      <<: *app-env
-      RUN_MIGRATIONS: "0"
-      WARMUP_CACHE: "0"
-    volumes:
-      - /var/darkmira/config:/var/darkmira/config:ro
+      mailer:
+        condition: service_started
+
+  # Sans domaine, aucun e-mail ne part : Mailpit les garde, consulte par
+  # tunnel SSH (ssh -L 8025:localhost:8025 ec2-user@<ip>).
+  mailer:
+    image: axllent/mailpit:v1.27
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
     networks:
       - internal
-
-volumes:
-  repos_data:
-  minio_data:
 
 networks:
   internal:

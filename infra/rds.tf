@@ -8,16 +8,16 @@ resource "aws_db_subnet_group" "main" {
 }
 
 resource "aws_db_instance" "main" {
-  identifier             = "${local.name_prefix}-mysql"
-  engine                 = "mysql"
-  engine_version         = "8.0"
+  identifier             = "${local.name_prefix}-postgres"
+  engine                 = "postgres"
+  engine_version         = "17"
   instance_class         = var.db_instance_class
   allocated_storage      = var.db_allocated_storage
   db_name                = var.db_name
   username               = var.db_username
   password               = var.db_password
   apply_immediately      = var.db_apply_immediately
-  port                   = 3306
+  port                   = 5432
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.rds.id]
   publicly_accessible    = false
@@ -27,6 +27,6 @@ resource "aws_db_instance" "main" {
   deletion_protection    = false
 
   tags = {
-    Name = "${local.name_prefix}-mysql"
+    Name = "${local.name_prefix}-postgres"
   }
 }

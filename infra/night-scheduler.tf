@@ -105,13 +105,12 @@ resource "aws_lambda_function" "night_scheduler" {
   runtime          = "python3.12"
   filename         = data.archive_file.night_scheduler_lambda.output_path
   source_code_hash = data.archive_file.night_scheduler_lambda.output_base64sha256
-  timeout          = var.night_shutdown_backup_timeout_seconds + 60
+  timeout          = 120
 
   environment {
     variables = {
-      APP_INSTANCE_ID                = aws_instance.app.id
-      BACKUP_COMMAND_TIMEOUT_SECONDS = tostring(var.night_shutdown_backup_timeout_seconds)
-      DB_IDENTIFIER                  = aws_db_instance.main.identifier
+      APP_INSTANCE_ID = aws_instance.app.id
+      DB_IDENTIFIER   = aws_db_instance.main.identifier
     }
   }
 

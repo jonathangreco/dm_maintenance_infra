@@ -13,10 +13,6 @@ output "aws_region" {
   value       = var.aws_region
 }
 
-output "mysql_backup_bucket_name" {
-  description = "Nom du bucket S3 prive contenant les exports SQL MySQL."
-  value       = aws_s3_bucket.mysql_backups.bucket
-}
 output "agent_runner_cluster_arn" {
   description = "ARN du cluster ECS des runs de l'agent."
   value       = var.enable_agent_runner ? aws_ecs_cluster.agent_runner[0].arn : null
@@ -57,7 +53,7 @@ output "agent_runner_registry_credentials_arn" {
   value       = var.enable_agent_runner && var.agent_runner_private_images ? aws_secretsmanager_secret.agent_runner_registry[0].arn : null
 }
 
-output "agent_runner_openai_parameter_arn" {
-  description = "ARN du parametre SSM portant la cle du modele."
-  value       = var.enable_agent_runner ? aws_ssm_parameter.agent_runner_openai_key[0].arn : null
+output "documents_bucket" {
+  description = "Bucket des documents conserves par l'application (DOCUMENTS_BUCKET)."
+  value       = aws_s3_bucket.documents.bucket
 }
