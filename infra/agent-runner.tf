@@ -13,9 +13,12 @@ resource "aws_ecs_cluster" "agent_runner" {
   })
 }
 
-# Aucune regle d'entree : la tache sort vers l'API du modele, GitHub, le registre
-# et S3, mais reste injoignable depuis l'exterieur. Elle est placee dans les
-# sous-reseaux publics pour eviter le cout fixe d'une passerelle NAT.
+# Aucune regle d'entree : la tache sort en 443 vers l'API du modele, les depots,
+# le registre et S3, mais reste injoignable depuis l'exterieur. Elle est placee
+# dans les sous-reseaux publics, avec une IP publique, pour eviter le cout fixe
+# d'une passerelle NAT. Toutes les commandes de Darkmira Analyseur la portent,
+# index compris : Fargate tire l'image par l'interface de la tache (dette
+# nommee dans la conception du deploiement de Darkmira Service).
 resource "aws_security_group" "agent_runner" {
   count = var.enable_agent_runner ? 1 : 0
 
@@ -33,10 +36,10 @@ resource "aws_security_group_rule" "agent_runner_egress" {
 
   security_group_id = aws_security_group.agent_runner[0].id
   type              = "egress"
-  description       = "Allow all outbound"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
+  description       = "HTTPS outbound only"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
   cidr_blocks       = ["0.0.0.0/0"]
 }
 
@@ -54,8 +57,8 @@ resource "aws_cloudwatch_log_group" "agent_runner" {
 resource "aws_s3_bucket" "agent_artifacts" {
   count = var.enable_agent_runner ? 1 : 0
 
-  # Un nom de bucket est global a tout AWS : le suffixe de compte suit la
-  # convention deja etablie par infra/mysql-backups.tf.
+  # Un nom de bucket est global a tout AWS : suffixe du compte. C'est le
+  # ANALYZER_BUCKET de Darkmira Service : dossiers d'etape sous runs/.
   bucket = "dm-${var.environment}-agent-artifacts-${data.aws_caller_identity.current.account_id}"
 
   tags = merge(local.common_tags, {
@@ -73,7 +76,23 @@ resource "aws_s3_bucket_public_access_block" "agent_artifacts" {
   restrict_public_buckets = true
 }
 
-# Les artefacts de run sont consommes par le worker dans les minutes qui suivent.
+resource "aws_s3_bucket_server_side_encryption_configuration" "agent_artifacts" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  bucket = aws_s3_bucket.agent_artifacts[0].id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# Les dossiers d'etape sont importes par l'application dans l'heure qui suit.
+# L'objet secrets d'une execution est supprime par l'application a la fin de
+# la tache ; s'il reste (tache perdue), son etiquette kind=secrets le fait
+# disparaitre au bout d'un jour. Une regle par prefixe ne peut viser
+# runs/*/secrets/ : d'ou l'etiquette, posee par EcsAnalyzerRunner.
 resource "aws_s3_bucket_lifecycle_configuration" "agent_artifacts" {
   count = var.enable_agent_runner ? 1 : 0
 
@@ -89,6 +108,33 @@ resource "aws_s3_bucket_lifecycle_configuration" "agent_artifacts" {
 
     expiration {
       days = 7
+    }
+  }
+
+  rule {
+    id     = "expire-forgotten-secrets"
+    status = "Enabled"
+
+    filter {
+      tag {
+        key   = "kind"
+        value = "secrets"
+      }
+    }
+
+    expiration {
+      days = 1
+    }
+  }
+
+  rule {
+    id     = "abort-incomplete-uploads"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
     }
   }
 }
@@ -209,11 +255,24 @@ resource "aws_iam_role_policy" "agent_runner_task_artifacts" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["s3:PutObject", "s3:GetObject"]
-      Resource = ["${aws_s3_bucket.agent_artifacts[0].arn}/runs/*"]
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = ["${aws_s3_bucket.agent_artifacts[0].arn}/runs/*"]
+      },
+      # `aws s3 cp --recursive` du conteneur init liste le dossier d'etape.
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [aws_s3_bucket.agent_artifacts[0].arn]
+        Condition = {
+          StringLike = {
+            "s3:prefix" = ["runs/*"]
+          }
+        }
+      },
+    ]
   })
 }
 
@@ -369,18 +428,4 @@ resource "aws_iam_role_policy" "agent_runner_sweeper" {
       },
     ]
   })
-}
-
-resource "aws_ssm_parameter" "agent_runner_openai_key" {
-  count = var.enable_agent_runner ? 1 : 0
-
-  name  = "/${local.name_prefix}/agent-runner/openai-api-key"
-  type  = "SecureString"
-  value = "a-renseigner-hors-terraform"
-
-  lifecycle {
-    ignore_changes = [value]
-  }
-
-  tags = local.common_tags
 }

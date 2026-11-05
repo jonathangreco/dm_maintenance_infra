@@ -82,9 +82,9 @@ resource "aws_security_group" "rds" {
 
 resource "aws_security_group_rule" "rds_from_app" {
   type                     = "ingress"
-  description              = "MySQL from app"
-  from_port                = 3306
-  to_port                  = 3306
+  description              = "PostgreSQL from app"
+  from_port                = 5432
+  to_port                  = 5432
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.app.id
   security_group_id        = aws_security_group.rds.id

@@ -166,7 +166,7 @@ variable "cloudwatch_log_retention_days" {
 }
 
 variable "db_instance_class" {
-  description = "Classe d'instance RDS MySQL."
+  description = "Classe d'instance RDS PostgreSQL."
   type        = string
   default     = "db.t3.micro"
 }
@@ -213,27 +213,6 @@ variable "night_shutdown_refresh_app_schedule" {
   default     = "cron(50 7 ? * MON-FRI *)"
 }
 
-variable "night_shutdown_backup_timeout_seconds" {
-  description = "Temps maximum accorde au dump MySQL avant l'arret nocturne."
-  type        = number
-  default     = 600
-
-  validation {
-    condition     = var.night_shutdown_backup_timeout_seconds >= 60 && var.night_shutdown_backup_timeout_seconds <= 840
-    error_message = "night_shutdown_backup_timeout_seconds doit etre compris entre 60 et 840 secondes."
-  }
-}
-
-variable "mysql_backup_retention_days" {
-  description = "Nombre de jours de conservation des exports SQL MySQL dans S3."
-  type        = number
-  default     = 7
-
-  validation {
-    condition     = var.mysql_backup_retention_days >= 1
-    error_message = "mysql_backup_retention_days doit etre superieur ou egal a 1."
-  }
-}
 variable "enable_agent_runner" {
   description = "Active le socle ECS Fargate pour les runs de l'agent de code."
   type        = bool
@@ -256,4 +235,28 @@ variable "agent_runner_max_task_minutes" {
   description = "Duree au-dela de laquelle une tache de run est consideree orpheline et arretee."
   type        = number
   default     = 90
+}
+
+variable "analyzer_image" {
+  description = "Image de Darkmira Analyseur, la meme pour toutes ses commandes."
+  type        = string
+  default     = "ghcr.io/jonathangreco/darkmira-analyzer:prod"
+}
+
+variable "analyzer_task_cpu" {
+  description = "CPU d'une tache de Darkmira Analyseur (unites Fargate)."
+  type        = number
+  default     = 2048
+}
+
+variable "analyzer_task_memory_mib" {
+  description = "Memoire d'une tache de Darkmira Analyseur (Mio)."
+  type        = number
+  default     = 4096
+}
+
+variable "mail_from" {
+  description = "Expediteur des e-mails de Darkmira Service (MAILER_FROM)."
+  type        = string
+  default     = "Darkmira Service <no-reply@darkmira.local>"
 }
