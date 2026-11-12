@@ -58,6 +58,22 @@ http://localhost:8025.
 5. Sur l'EC2 : `/opt/darkmira-maintenance/deploy-release.sh`, puis
    `docker compose --env-file .env -f docker-compose.prod.yml run --rm app php bin/console app:create-super-admin`.
 
+### Commandes d'exploitation sur l'EC2
+
+Elles se lancent à la main, quand un humain le décide. Pour ouvrir un
+terminal sur l'EC2 : console AWS → EC2 → instance de l'application →
+**Connect** → onglet **Session Manager** → **Connect**. Puis :
+
+```bash
+cd /opt/darkmira-maintenance
+sudo docker compose --env-file .env -f docker-compose.prod.yml exec app php bin/console <commande>
+```
+
+| Commande | Effet |
+|---|---|
+| `app:create-super-admin <email> <prénom> <nom>` | Crée un super administrateur ; le mot de passe se saisit au clavier. |
+| `app:ai-catalogue:sync` | Synchronise les modèles d'IA avec le catalogue public des prix (LiteLLM) : enregistre les modèles de conversation des fournisseurs reliés au catalogue et met à jour leurs tarifs. Elle tourne aussi seule chaque lundi à 3 h ; à lancer après avoir relié un fournisseur dans le back office. |
+
 Le token GHCR de l'EC2 est lu depuis :
 
 ```text
