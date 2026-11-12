@@ -13,6 +13,16 @@ resource "aws_ecs_cluster" "agent_runner" {
   })
 }
 
+# Role lie au service ECS : sans lui, RunTask echoue (« Unable to assume the
+# service linked role »). Il vaut pour tout le compte ; deja present dans un
+# compte, il s'importe : terraform import 'aws_iam_service_linked_role.ecs[0]'
+# arn:aws:iam::<compte>:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS
+resource "aws_iam_service_linked_role" "ecs" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  aws_service_name = "ecs.amazonaws.com"
+}
+
 # Aucune regle d'entree : la tache sort en 443 vers l'API du modele, les depots,
 # le registre et S3, mais reste injoignable depuis l'exterieur. Elle est placee
 # dans les sous-reseaux publics, avec une IP publique, pour eviter le cout fixe
