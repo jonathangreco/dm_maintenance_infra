@@ -264,25 +264,69 @@ resource "aws_iam_role_policy" "agent_runner_task_artifacts" {
   role = aws_iam_role.agent_runner_task[0].id
 
   policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:GetObject"]
-        Resource = ["${aws_s3_bucket.agent_artifacts[0].arn}/runs/*"]
-      },
-      # `aws s3 cp --recursive` du conteneur init liste le dossier d'etape.
-      {
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket"]
-        Resource = [aws_s3_bucket.agent_artifacts[0].arn]
-        Condition = {
-          StringLike = {
-            "s3:prefix" = ["runs/*"]
-          }
+    Version   = "2012-10-17"
+    Statement = local.agent_runner_run_statements
+  })
+}
+
+
+locals {
+  # Droits d'une tache sur les dossiers d'etape (voir la limite assumee
+  # ci-dessus), communs aux deux roles.
+  # ARN vide quand l'agent runner est desactive : les politiques qui s'en
+  # servent n'existent pas alors.
+  agent_artifacts_arn = try(aws_s3_bucket.agent_artifacts[0].arn, "")
+
+  agent_runner_run_statements = [
+    {
+      Effect   = "Allow"
+      Action   = ["s3:PutObject", "s3:GetObject"]
+      Resource = ["${local.agent_artifacts_arn}/runs/*"]
+    },
+    # `aws s3 cp --recursive` du conteneur init liste le dossier d'etape.
+    {
+      Effect   = "Allow"
+      Action   = ["s3:ListBucket"]
+      Resource = [local.agent_artifacts_arn]
+      Condition = {
+        StringLike = {
+          "s3:prefix" = ["runs/*"]
         }
+      }
+    },
+  ]
+}
+
+# install, index et plan ne recoivent aucun secret (PreparedRequest::secretsFor
+# de Darkmira Service) : leur role ne lit pas les objets secrets des autres
+# taches. install execute les scripts d'installation du client, code non
+# fiable ; s'il atteint les identifiants de sa tache, il ne trouve ni la cle du
+# fournisseur d'IA d'un read, ni les jetons de depot d'un fetch.
+resource "aws_iam_role" "agent_runner_task_no_secrets" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  name               = "${local.name_prefix}-agent-runner-task-no-secrets"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
+  tags               = local.common_tags
+}
+
+resource "aws_iam_role_policy" "agent_runner_task_no_secrets" {
+  count = var.enable_agent_runner ? 1 : 0
+
+  name = "${local.name_prefix}-agent-runner-artifacts-no-secrets"
+  role = aws_iam_role.agent_runner_task_no_secrets[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(local.agent_runner_run_statements, [
+      {
+        # Ni lire ni ecraser l'objet secrets d'une autre tache : ecrit avant son
+        # demarrage, il injecterait des variables dans un fetch ou un read.
+        Effect   = "Deny"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = ["${local.agent_artifacts_arn}/runs/*/secrets/*"]
       },
-    ]
+    ])
   })
 }
 

@@ -183,6 +183,7 @@ resource "aws_iam_role_policy" "app_ec2_agent_runner" {
         Resource = [
           aws_iam_role.agent_runner_execution[0].arn,
           aws_iam_role.agent_runner_task[0].arn,
+          aws_iam_role.agent_runner_task_no_secrets[0].arn,
         ]
         Condition = {
           StringEquals = {

@@ -44,8 +44,13 @@ output "agent_runner_execution_role_arn" {
 }
 
 output "agent_runner_task_role_arn" {
-  description = "Role porte par les conteneurs de run."
+  description = "Role des conteneurs de run qui recoivent des secrets (fetch, read)."
   value       = var.enable_agent_runner ? aws_iam_role.agent_runner_task[0].arn : null
+}
+
+output "agent_runner_task_no_secrets_role_arn" {
+  description = "Role des conteneurs de run sans secret (install, index, plan)."
+  value       = var.enable_agent_runner ? aws_iam_role.agent_runner_task_no_secrets[0].arn : null
 }
 
 output "agent_runner_registry_credentials_arn" {

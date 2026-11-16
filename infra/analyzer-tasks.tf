@@ -75,7 +75,8 @@ resource "aws_ecs_task_definition" "analyzer" {
   cpu                      = var.analyzer_task_cpu
   memory                   = var.analyzer_task_memory_mib
   execution_role_arn       = aws_iam_role.agent_runner_execution[0].arn
-  task_role_arn            = aws_iam_role.agent_runner_task[0].arn
+  # fetch et read recoivent des secrets ; les autres commandes, aucun.
+  task_role_arn = contains(["fetch", "read"], each.value) ? aws_iam_role.agent_runner_task[0].arn : aws_iam_role.agent_runner_task_no_secrets[0].arn
 
   runtime_platform {
     operating_system_family = "LINUX"
